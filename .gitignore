@@ -1,7 +1,7 @@
 .venv/
-build/
-dist/
-vendor/
+/build/
+/dist/
+/vendor/
 __pycache__/
 *.pyc
 .DS_Store

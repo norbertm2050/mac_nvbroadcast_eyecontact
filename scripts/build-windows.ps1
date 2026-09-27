@@ -10,7 +10,8 @@ $dest = 'build/package/RemoteEyeContact'
 if (!(Test-Path 'vendor/mediamtx.exe')) { throw 'Run scripts/fetch-mediamtx.py first.' }
 Copy-Item vendor/mediamtx.exe $dest
 Copy-Item scripts/configure-firewall.ps1 $dest
-Copy-Item LICENSE,THIRD_PARTY_NOTICES.md,README.md $dest
+Copy-Item LICENSE,THIRD_PARTY_NOTICES.md,README.md,CHANGELOG.md $dest
+Copy-Item docs "$dest/docs" -Recurse -Force
 Copy-Item licenses "$dest/licenses" -Recurse -Force
 New-Item dist -ItemType Directory -Force | Out-Null
 Compress-Archive -Path "$dest/*" -DestinationPath dist/Remote-Eye-Contact-Windows-x64.zip -Force
