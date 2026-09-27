@@ -1,0 +1,12 @@
+.venv/
+build/
+dist/
+vendor/
+__pycache__/
+*.pyc
+.DS_Store
+*.spec
+*.log
+config.json
+*.key
+*.pem
