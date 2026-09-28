@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 — 2026-09-28
+
+- Enable configurable Windows logon startup with minimized UI and automatic Broadcast launch.
+- Retry transient service startup/server failures and keep Windows awake while the service runs; stop cancels retry and releases the sleep request.
+- Add an original AI-generated eye/camera app icon to the Mac bundle, Windows executable and window.
+- Document the distinction between application startup and Windows automatic login; login credentials are never part of the application or release.
+
 ## 1.0.0 — 2026-09-27
 
 - Portable Apple Silicon Mac application and Windows x64 application folder with bundled runtimes.

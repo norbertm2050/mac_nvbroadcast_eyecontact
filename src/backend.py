@@ -14,6 +14,7 @@ def main():
     )
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--autostart", action="store_true")
+    parser.add_argument("--minimized", action="store_true")
     args = parser.parse_args()
     for name in (
         "http_proxy",
@@ -42,7 +43,7 @@ def main():
     else:
         import windows_app
 
-        windows_app.main(autostart=args.autostart)
+        windows_app.main(autostart=args.autostart, minimized=args.minimized)
 
 
 if __name__ == "__main__":

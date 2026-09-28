@@ -1,5 +1,7 @@
 # Remote Eye Contact
 
+<img src="assets/icon.png" width="112" alt="Remote Eye Contact icon">
+
 把 Mac 摄像头送到 Windows 的 NVIDIA Broadcast 做眼神矫正，再回传成 Mac 上的虚拟摄像头。**固定 720p / 30 fps，仅视频，不处理麦克风。**
 
 Mac 用菜单栏应用，Windows 用一个服务控制窗口；运行时无需打开 OBS，也不需要 SSH、Python 或命令行。
@@ -30,10 +32,14 @@ flowchart LR
 
 1. 完整解压 Windows 压缩包到可长期保留的位置，双击 `RemoteEyeContact.exe`。旁边的 `_internal` 和 `mediamtx.exe` 是运行时的一部分，不要只移动 `.exe`。
 2. 打开 NVIDIA Broadcast，在“摄像头”选择 **OBS Virtual Camera**，设为 **1280×720 / 30 fps**，只开启 **Eye Contact / 眼神接触** 效果。可以将 Broadcast 最小化。
-3. 在 Remote Eye Contact 点击“启动服务”。首次出现防火墙提示时，允许实际使用的网络。连接不上时，可点“设置防火墙”并批准系统管理员提示；助手只允许局域网和 Tailscale 网段访问所选 TCP 端口。不要把 RTSP 端口转发到公网。
+3. 在 Remote Eye Contact 点击“启动服务”。默认勾选“登录 Windows 后自动启动服务”，之后会自动启动并最小化，同时自动拉起 NVIDIA Broadcast。首次出现防火墙提示时，允许实际使用的网络。连接不上时，可点“设置防火墙”并批准系统管理员提示；助手只允许局域网和 Tailscale 网段访问所选 TCP 端口。不要把 RTSP 端口转发到公网。
 4. 记下窗口中的可达 IP（或你自己的 Tailscale 主机名）、端口和连接码。连接码保存在本机，每次打开不会变化。
 
-Windows 必须保持登录到桌面、网络可达且不睡眠。远程桌面会话切换、锁屏及显卡驱动更新可能影响虚拟摄像头/硬件加速；实际行为取决于驱动和 Broadcast。
+服务运行时应用会请求 Windows 保持唤醒（允许显示器熄灭），停止服务时释放该请求。需要停用自动启动时，取消应用中的勾选；移动整个 Windows 应用文件夹后，手动打开一次即可更新自动启动路径。
+
+**开机完全无人值守**：NVIDIA Broadcast 需要交互式桌面会话，应用的“自动启动”指登录 Windows 后运行。若机器停在登录界面，需要由机主另外配置 Windows 自动登录，例如使用 [Microsoft Sysinternals Autologon](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon)。本应用不索取、不保存 Windows 登录密码，也不会替所有用户更改登录安全策略。自动登录会让开机直接进入账号，请按你对这台机器的访问控制要求决定。Windows 更新、BitLocker 恢复提示等启动前提示仍可能需要人工处理。
+
+Windows 必须保持登录到桌面、网络可达。远程桌面会话切换、锁屏及显卡驱动更新可能影响虚拟摄像头/硬件加速；实际行为取决于驱动和 Broadcast。
 
 ## Mac 端
 
@@ -43,7 +49,7 @@ Windows 必须保持登录到桌面、网络可达且不睡眠。远程桌面会
 4. 在会议软件中选择 **OBS Virtual Camera**。麦克风继续选你平时使用的麦克风。
 5. 菜单只有一个切换项：运行时显示“停止眼神矫正”，停止后显示“启动眼神矫正”。授权及停止过程中禁用重复点击。停止后才能修改连接设置。
 
-退出 Mac 应用会释放 Mac 摄像头；Windows 服务独立运行，可在 Windows 点击“停止服务”释放其视频工作进程。关闭 Windows 控制窗口也会停止服务。
+退出 Mac 应用会释放 Mac 摄像头；Windows 服务独立运行，可在 Windows 点击“停止服务”释放其视频工作进程；该操作取消本次会话的自动重试，之后仍按自动启动设置在下次登录运行。关闭 Windows 控制窗口也会停止服务。
 
 ## 网络与隐私
 
@@ -63,6 +69,8 @@ VideoToolbox 编码/解码、Windows D3D11VA 解码、NVENC 低延迟编码；�
 发布前原生链路在一组 Apple Silicon Mac + RTX 3070 Laptop、局域网环境中测得约 **187 ms 中位数 / 238 ms P95**（120 秒，3504 个有效样本）。这是从 Mac 软件帧时间戳到虚拟摄像头读回的测量，**不包含传感器曝光、屏幕显示和会议软件缓冲**，也不是所有设备的保证值。便携发行包验证结果见 [测试记录](docs/VALIDATION.md)。
 
 ## 故障排查
+
+- **Windows 重启后连不上**：确认已进入用户桌面，任务管理器 → 启动应用中没有禁用 RemoteEyeContact，且安装路径未被删除。应用设置的登录自动启动不会跳过 Windows 密码/PIN。
 
 - **一直等待 Windows 视频**：先确认 Windows 服务已启动、地址/端口/连接码一致、防火墙放行，再检查 Broadcast 输入和眼神效果。通过两端“运行日志”查看错误。
 - **端口占用**：先停止旧版服务，或修改两端端口。不自动结束其他应用的进程。

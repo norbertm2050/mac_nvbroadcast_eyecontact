@@ -15,3 +15,13 @@ Target: v1.0.0, 2026-09-27. Tested on an Apple Silicon M5 MacBook Air running ma
 Hardware support on other Mac/Windows/GPU versions is not yet verified. This is an unsigned community release; it does not include platform notarization or commercial signing. First-run camera, virtual camera extension and firewall permissions still require user interaction.
 
 Performance figures in the README are from the earlier optimized native pipeline, not a claim of a separately remeasured portable-package latency. The package preserves its 720p30 codec and frame-forwarding settings. Release smoke tests check actual frame rates and actual hardware-decoder status, rather than treating a configured frame rate as measured throughput.
+
+
+## v1.1.0 automatic startup and icon
+
+- Tested a real Windows restart with the owner's explicit consent. Windows automatically logged into the interactive desktop and started `RemoteEyeContact.exe --autostart --minimized` from its per-user startup entry. The controller then managed both video workers; no manual Windows launch was performed after restart.
+- The Mac remained open during the restart and automatically reconnected. First ready state occurred within approximately 80 seconds of starting the reboot observation (includes shutdown, boot, logon and video warmup).
+- This particular reboot test produced roughly 23–25 processed frames/s while the camera uplink remained about 30 fps. The output format remains 720p30; the fixed format is not a guarantee of 30 unique corrected frames/s under every Windows power/driver/background-load condition.
+- A transient decoder error later activated the existing software-decoder fallback, and video recovered automatically. This test therefore verifies unattended recovery, not uninterrupted hardware decoding or a new latency benchmark.
+- Windows automatic login was a separate, owner-authorized machine configuration. No login credential or automatic-login setup script is shipped. Ordinary users must choose and configure their own login policy.
+- Verified the generated artwork is embedded in the Mac ICNS bundle and Windows ICO executable/window assets. Four additional tests cover startup command quoting and Broadcast launch behavior (15 total local tests, including the optional hardware encoder test).

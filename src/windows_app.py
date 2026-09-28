@@ -10,6 +10,8 @@ import socket
 import subprocess
 import sys
 import time
+import threading
+from windows_startup import enable_startup, startup_enabled, ensure_broadcast
 import tkinter as tk
 from tkinter import messagebox, ttk
 import webbrowser
@@ -156,11 +158,19 @@ class Window:
         self.handles = {}
         self.running = False
         self.started = 0
+        self.want_running = False
+        self.last_retry = 0
+        self.broadcast_pending = False
+        self.last_broadcast_check = 0
+        self.broadcast_error = None
         if not self.config.get("token"):
             self.config["token"] = secrets.token_hex(16)
             save_config(self.config)
         root.title("Remote Eye Contact · Windows")
-        root.geometry("660x485")
+        root.geometry("660x550")
+        icon = Path(sys.executable).parent / "AppIcon.ico"
+        if icon.exists():
+            root.iconbitmap(str(icon))
         root.resizable(False, False)
         frame = ttk.Frame(root, padding=22)
         frame.pack(fill="both", expand=True)
@@ -235,8 +245,49 @@ class Window:
             text="两端需先安装 OBS 虚拟摄像头驱动；无需运行 OBS。\nWindows 需登录桌面并保持唤醒。仅传输视频，不采集麦克风。",
             wraplength=610,
         ).pack(anchor="w", pady=8)
+        self.startup = tk.BooleanVar(value=self.config.get("start_on_login", True))
+        ttk.Checkbutton(
+            frame,
+            text="登录 Windows 后自动启动服务（最小化运行）",
+            variable=self.startup,
+            command=self.set_startup,
+        ).pack(anchor="w", pady=(8, 0))
+        ttk.Label(
+            frame,
+            text="自动启动会同步启动 Broadcast；服务运行时保持系统唤醒。",
+            wraplength=610,
+        ).pack(anchor="w", pady=4)
+        try:
+            enable_startup(self.startup.get())
+        except OSError as error:
+            self.status.set("设置自动启动失败：" + str(error))
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(1000, self.poll)
+
+    def set_startup(self):
+        try:
+            enable_startup(self.startup.get())
+            self.config["start_on_login"] = self.startup.get()
+            save_config(self.config)
+        except OSError as error:
+            self.startup.set(startup_enabled())
+            messagebox.showerror("自动启动", str(error))
+
+    def check_broadcast(self):
+        if self.broadcast_pending or time.monotonic() - self.last_broadcast_check < 15:
+            return
+        self.broadcast_pending = True
+        self.last_broadcast_check = time.monotonic()
+
+        def check():
+            try:
+                self.broadcast_error = ensure_broadcast()
+            except Exception as error:
+                self.broadcast_error = str(error)
+            finally:
+                self.broadcast_pending = False
+
+        threading.Thread(target=check, daemon=True).start()
 
     def copy(self):
         self.root.clipboard_clear()
@@ -293,9 +344,16 @@ class Window:
         )
 
     def toggle(self):
-        if self.running:
+        if self.running or self.want_running:
+            self.want_running = False
             self.stop()
             return
+        self.want_running = True
+        self.start_service()
+
+    def start_service(self):
+        self.last_retry = time.monotonic()
+        self.check_broadcast()
         try:
             port = int(self.port.get())
             if not 1024 <= port <= 65535:
@@ -319,14 +377,17 @@ class Window:
             self.spawn("receiver", worker_command("receiver"))
             self.spawn("sender", worker_command("sender"))
             self.running = True
+            ctypes.windll.kernel32.SetThreadExecutionState(0x80000001)
             self.started = time.time()
             self.button.configure(text="停止服务")
             self.port_entry.configure(state="disabled")
             self.status.set("正在启动… 请允许防火墙访问所使用的网络。")
         except Exception as e:
             self.stop()
-            messagebox.showerror(
-                "启动失败", str(e) + "\n若端口被占用，请停止旧服务或更换两端端口。"
+            self.status.set(
+                "启动失败，将自动重试："
+                + str(e)
+                + "\n若端口被占用，请停止旧服务或更换两端端口。"
             )
 
     def stop(self):
@@ -351,6 +412,7 @@ class Window:
             f.close()
         self.handles.clear()
         self.running = False
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
         self.button.configure(text="启动服务")
         self.port_entry.configure(state="normal")
         self.status.set("已停止，摄像头资源已释放。")
@@ -360,7 +422,16 @@ class Window:
         )
 
     def poll(self):
+        if (
+            self.want_running
+            and not self.running
+            and time.monotonic() - self.last_retry >= 10
+        ):
+            self.start_service()
+        if self.want_running and not self.running:
+            self.button.configure(text="取消自动重试")
         if self.running:
+            self.check_broadcast()
             rx = {}
             tx = {}
             try:
@@ -382,6 +453,10 @@ class Window:
                         if p.poll() is None:
                             p.kill()
                             p.wait()
+                        # Do not let a dead worker's stale timestamp kill its replacement.
+                        (self.home / "logs" / f"native-{role}.json").unlink(
+                            missing_ok=True
+                        )
                         self.spawn(role, worker_command(role))
                 ready = (
                     bool(rx.get("fresh"))
@@ -395,6 +470,8 @@ class Window:
                     if ready
                     else "等待 Mac 视频… 若已连接，请检查地址、连接码、防火墙和 Broadcast 设置。"
                 )
+                if self.broadcast_error:
+                    self.status.set(self.broadcast_error)
                 atomic_json(
                     self.home / "state/windows-status.json",
                     dict(
@@ -407,20 +484,24 @@ class Window:
         self.root.after(1000, self.poll)
 
     def close(self):
+        self.want_running = False
         self.stop()
         self.root.destroy()
 
 
-def main(autostart=False):
+def main(autostart=False, minimized=False):
     root = tk.Tk()
     try:
         own_process_tree()
     except Exception as e:
         root.withdraw()
-        messagebox.showerror("Remote Eye Contact", str(e))
+        if not autostart:
+            messagebox.showerror("Remote Eye Contact", str(e))
         root.destroy()
         return
     window = Window(root)
+    if minimized:
+        root.after(100, root.iconify)
     if autostart:
         root.after(500, window.toggle)
     root.mainloop()
