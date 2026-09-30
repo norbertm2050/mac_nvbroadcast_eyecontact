@@ -15,7 +15,7 @@ xcrun swiftc app/MenuApp.swift -O -o "$APP/Contents/MacOS/RemoteEyeContact" -fra
 "$PYTHON" - "$APP/Contents/Info.plist" <<'PY'
 import plistlib,sys
 with open(sys.argv[1],'wb') as f:
-    plistlib.dump(dict(CFBundleIdentifier='io.github.norbertm2050.remote-eye-contact',CFBundleName='Remote Eye Contact',CFBundleExecutable='RemoteEyeContact',CFBundlePackageType='APPL',CFBundleShortVersionString='1.1.0',CFBundleVersion='2',CFBundleIconFile='AppIcon',LSUIElement=True,LSMinimumSystemVersion='14.0',NSCameraUseContinuityCameraDeviceType=True,NSCameraUsageDescription='将摄像头画面发送至你配置的 Windows NVIDIA Broadcast 进行眼神矫正，再输出到本机虚拟摄像头。'),f)
+    plistlib.dump(dict(CFBundleIdentifier='io.github.norbertm2050.remote-eye-contact',CFBundleName='Remote Eye Contact',CFBundleExecutable='RemoteEyeContact',CFBundlePackageType='APPL',CFBundleShortVersionString='1.1.1',CFBundleVersion='3',CFBundleIconFile='AppIcon',LSUIElement=True,LSMinimumSystemVersion='14.0',NSCameraUseContinuityCameraDeviceType=True,NSCameraUsageDescription='将摄像头画面发送至你配置的 Windows NVIDIA Broadcast 进行眼神矫正，再输出到本机虚拟摄像头。'),f)
 PY
 mkdir -p "$APP/Contents/Resources/assets"
 cp assets/icon.png "$APP/Contents/Resources/assets/"

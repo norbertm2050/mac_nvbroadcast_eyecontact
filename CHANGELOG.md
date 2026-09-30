@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 — 2026-09-30
+
+- Mac automatically reconnects an already authenticated but stopped Tailscale connection when the configured Windows address belongs to Tailscale.
+- Show actionable network/login status in the menu; retry while video is unavailable without polling Tailscale during healthy streaming. Ordinary LAN addresses do not trigger Tailscale commands.
+
 ## 1.1.0 — 2026-09-28
 
 - Enable configurable Windows logon startup with minimized UI and automatic Broadcast launch.

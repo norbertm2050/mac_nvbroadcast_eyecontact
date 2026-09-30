@@ -103,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let phase = s["phase"] as? String ?? "starting"
         let names = ["ready":"眼神矫正已就绪 · 720p30","starting":"启动中…","connecting":"连接 Windows…","warming":"视频预热中…","reconnecting":"等待 Windows 视频…","stopped":"已停止","error":"启动失败，请查看日志"]
         statusLine.title = names[phase] ?? phase
+        if phase != "ready", let message = s["networkMessage"] as? String, !message.isEmpty { statusLine.title = message }
         item.button?.title = phase == "ready" ? "◉ Eye" : (phase == "error" ? "! Eye" : "… Eye")
         if let updated = s["updated"] as? Double, Date().timeIntervalSince1970 - updated > 6 { statusLine.title = "等待摄像头或连接恢复…" }
     }

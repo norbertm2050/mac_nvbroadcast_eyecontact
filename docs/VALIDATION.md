@@ -25,3 +25,10 @@ Performance figures in the README are from the earlier optimized native pipeline
 - A transient decoder error later activated the existing software-decoder fallback, and video recovered automatically. This test therefore verifies unattended recovery, not uninterrupted hardware decoding or a new latency benchmark.
 - Windows automatic login was a separate, owner-authorized machine configuration. No login credential or automatic-login setup script is shipped. Ordinary users must choose and configure their own login policy.
 - Verified the generated artwork is embedded in the Mac ICNS bundle and Windows ICO executable/window assets. Four additional tests cover startup command quoting and Broadcast launch behavior (15 total local tests, including the optional hardware encoder test).
+
+## v1.1.1 Tailscale recovery
+
+- Diagnosed a stopped Mac Tailscale connection: the configured Tailnet hostname did not resolve and video could not reach the otherwise running Windows service. Restoring the authenticated Tailscale connection allowed the existing pipeline to recover automatically, with approximately 25–26 processed frames/s and VideoToolbox decoding.
+- Added seven network tests, covering Tailnet address classification, LAN isolation, stopped-connection recovery, login guidance without automatic authentication, bounded command timeouts, cancellation before connection, and no Tailscale polling while video is healthy. All 22 local tests passed, including the hardware encoder test.
+- Verified the new helper against the installed, connected Tailscale client. The stopped-state branch is tested with mocked command results; automated tests do not disconnect the user's shared VPN.
+- Rebuilt and signature-verified the Mac bundle and scanned its Python archive for deployment-specific identifiers. The rebuilt application requires renewed macOS camera consent before its end-to-end video check can complete.

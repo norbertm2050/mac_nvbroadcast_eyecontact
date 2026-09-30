@@ -26,6 +26,7 @@ from latest_frame import LatestFrame
 from video_pixels import uyvy_view
 from video_codec import mac_encoder_options
 from video_decode import decode_from_keyframe
+from network_ready import watch_network
 from av.codec.hwaccel import HWAccel
 
 import ctypes
@@ -395,6 +396,12 @@ def main():
     try:
         state(phase="connecting")
         rtsp_url(CONFIG, "raw")
+        threading.Thread(
+            target=watch_network,
+            args=(CONFIG["host"], STOP, lambda: STATE.get("phase") == "ready",
+                  lambda message: state(networkMessage=message)),
+            daemon=True,
+        ).start()
         for worker in [capture, sender, receiver]:
             threading.Thread(target=worker, daemon=True).start()
         virtual_camera()
