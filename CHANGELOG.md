@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — 2026-10-01
+
+- Capture Mac camera frames as UYVY before converting to NV12 for hardware encoding, fixing observed striped/corrupted input with direct NV12 capture. Expose capture format, dimensions and plane strides in local health status.
+- Preserve ready video across frame-rate dips instead of repeatedly blanking it for warmup. Actual stale video still blanks after 0.75 seconds; recovery uses a shorter warmup.
+- Open Broadcast output after live Windows input has warmed up; reopen after sustained input loss. Debounce brief input interruptions to avoid unnecessary camera restarts.
+
 ## 1.1.1 — 2026-09-30
 
 - Mac automatically reconnects an already authenticated but stopped Tailscale connection when the configured Windows address belongs to Tailscale.

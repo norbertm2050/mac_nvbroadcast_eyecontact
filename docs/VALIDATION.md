@@ -32,3 +32,11 @@ Performance figures in the README are from the earlier optimized native pipeline
 - Added seven network tests, covering Tailnet address classification, LAN isolation, stopped-connection recovery, login guidance without automatic authentication, bounded command timeouts, cancellation before connection, and no Tailscale polling while video is healthy. All 22 local tests passed, including the hardware encoder test.
 - Verified the new helper against the installed, connected Tailscale client. The stopped-state branch is tested with mocked command results; automated tests do not disconnect the user's shared VPN.
 - Rebuilt and signature-verified the Mac bundle and scanned its Python archive for deployment-specific identifiers. The rebuilt application requires renewed macOS camera consent before its end-to-end video check can complete.
+
+## 2026-10-01 image corruption and intermittent blank output
+
+- Compared actual frames at the Mac uplink, Windows virtual-camera input and Broadcast return. The corrupted image was already present in the uplink. Changing AVFoundation capture from NV12 to UYVY restored normal images; encoding remains hardware-accelerated NV12/H.264 at 720p30. This is an observed compatibility workaround, not a claim that every NV12 capture device is faulty.
+- Reproduced repeated warmup/black output while both RTSP connections remained healthy: processed throughput briefly fell below the old continuous-readiness threshold. Readiness now latches while frames remain fresh. Genuine stale output still blanks after 0.75 seconds, with a shorter recovery warmup and no additional video queue.
+- Windows waits for live input before opening Broadcast output and reopens after sustained input loss; brief input-status dips are debounced.
+- All 27 local tests passed, including the hardware encoder regression test. A 90-second runtime observation produced 160 steady-state samples (after excluding the first 10 seconds), all ready, with median received throughput 29.9 fps and no additional reconnects. The user confirmed normal moving images before the final jitter fix; this measurement checks pipeline state and throughput, not an independently remeasured end-to-end latency.
+- Diagnostic frames and machine-specific logs remain private and are excluded from source control and release assets.

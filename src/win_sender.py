@@ -4,16 +4,36 @@ import av, threading, time, json, os, fractions, traceback
 from pathlib import Path
 from latest_frame import LatestFrame
 from settings import data_dir, load_config, safe_error
+from capture_readiness import CaptureReadiness, receiver_is_live
 
 ROOT = data_dir()
 CONFIG = load_config()
 latest = LatestFrame()
 status = {"captured": 0, "sent": 0, "pid": os.getpid()}
+input_ready = threading.Event()
+
+
+def watch_input():
+    readiness = CaptureReadiness()
+    while not (ROOT / "state/stop").exists():
+        ready = readiness.update(
+            receiver_is_live(ROOT / "logs/native-receiver.json"), time.monotonic()
+        )
+        if ready:
+            input_ready.set()
+        else:
+            input_ready.clear()
+            status.pop("captureOpened", None)
+        status["waitingForInput"] = not ready
+        time.sleep(0.5)
 
 
 def capture():
     while not (ROOT / "state/stop").exists():
+        if not input_ready.wait(0.5):
+            continue
         try:
+            status["captureOpened"] = time.time()
             with av.open(
                 "video=Camera (NVIDIA Broadcast)",
                 format="dshow",
@@ -24,6 +44,8 @@ def capture():
                 },
             ) as camera:
                 for frame in camera.decode(video=0):
+                    if not input_ready.is_set() or (ROOT / "state/stop").exists():
+                        break
                     latest.put(frame)
                     status["captured"] += 1
                     status["lastCapture"] = time.time()
@@ -47,11 +69,13 @@ def monitor():
             tmp.replace(ROOT / "logs/native-sender.json")
         except OSError:
             pass
-        if status.get("lastCapture") and time.time() - status["lastCapture"] > 10:
+        last_progress = max(status.get("lastCapture", 0), status.get("captureOpened", 0))
+        if input_ready.is_set() and status.get("captureOpened") and time.time() - last_progress > 10:
             os._exit(2)
         time.sleep(1)
 
 
+threading.Thread(target=watch_input, daemon=True).start()
 threading.Thread(target=capture, daemon=True).start()
 threading.Thread(target=monitor, daemon=True).start()
 while not (ROOT / "state/stop").exists():
@@ -87,6 +111,8 @@ while not (ROOT / "state/stop").exists():
                 if item is None:
                     continue
                 last, frame = item
+                if not input_ready.is_set() or time.monotonic() - last > 0.5:
+                    continue
                 frame = frame.reformat(format="nv12")
                 frame.pict_type = av.video.frame.PictureType.NONE
                 frame.pts = pts

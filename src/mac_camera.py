@@ -27,6 +27,7 @@ from video_pixels import uyvy_view
 from video_codec import mac_encoder_options
 from video_decode import decode_from_keyframe
 from network_ready import watch_network
+from video_readiness import VideoReadiness
 from av.codec.hwaccel import HWAccel
 
 import ctypes
@@ -84,7 +85,7 @@ def capture():
             opts = {
                 "video_size": f"{CONFIG['width']}x{CONFIG['height']}",
                 "framerate": str(CONFIG["fps"]),
-                "pixel_format": "nv12",
+                "pixel_format": CONFIG.get("capture_pixel_format", "uyvy422"),
             }
             with av.open(
                 CONFIG["camera"] + ":none", format="avfoundation", options=opts
@@ -97,6 +98,9 @@ def capture():
                             for frame in packet.decode():
                                 if STOP.is_set():
                                     return
+                                state(capturePixelFormat=frame.format.name,
+                                      captureSize=[frame.width, frame.height],
+                                      capturePlaneStrides=[p.line_size for p in frame.planes])
                                 put("capture", frame)
                                 bump("captureFrames")
                                 last_capture = time.monotonic()
@@ -270,7 +274,7 @@ def receiver():
 def virtual_camera():
     history = collections.deque()
     last = 0
-    ready_since = None
+    readiness = VideoReadiness(CONFIG["warmup_seconds"])
     frame_driven = CONFIG.get("frame_driven_output", False)
     fmt = CONFIG.get("virtual_pixel_format", "yuv420p")
     if fmt == "uyvy422":
@@ -315,22 +319,16 @@ def virtual_camera():
             captured = get("capture")
             fresh = (
                 item is not None
-                and now - item[0] < 0.35
+                and now - item[0] < 0.75
                 and captured is not None
-                and now - captured[0] < 0.35
+                and now - captured[0] < 0.75
                 and STATE.get("senderConnected", False)
-                and now - STATE.get("lastSent", 0) < 0.35
+                and now - STATE.get("lastSent", 0) < 0.75
             )
-            flowing = fresh and len(history) >= CONFIG["fps"] * 1.4
-            if flowing:
-                if ready_since is None:
-                    ready_since = now
-            else:
-                ready_since = None
-            warmed = (
-                ready_since is not None
-                and now - ready_since >= CONFIG["warmup_seconds"]
-            )
+            # At least 15 unique frames/s during warmup. Once ready, only
+            # freshness (not a throughput dip) can blank the output.
+            flowing = fresh and len(history) >= CONFIG["fps"]
+            warmed = readiness.update(fresh, flowing, now)
             if warmed:
                 # The stream is already 30 fps. Forward each newest frame at arrival,
                 # avoiding another independently phased 30 Hz software timer.

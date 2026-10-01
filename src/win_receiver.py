@@ -89,7 +89,7 @@ try:
                 item = latest.peek()
             new_frame = item is not None and item[0] != last_item
             now = time.monotonic()
-            fresh = item is not None and now - item[0] < 0.4
+            fresh = item is not None and now - item[0] < 0.75
             if not frame_driven or new_frame or not fresh:
                 cam.send(item[1] if fresh else blank)
             if item:
@@ -109,7 +109,7 @@ try:
                                 fps=round((frames - last_frames) / (now - last), 2),
                                 updated=time.time(),
                                 error=error,
-                                fresh=bool(item and now - item[0] < 0.4),
+                                fresh=bool(item and now - item[0] < 0.75),
                             )
                         )
                     )
