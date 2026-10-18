@@ -5,6 +5,22 @@
 #import <mach/mach_time.h>
 #include <string.h>
 #include <stdlib.h>
+#include <pthread.h>
+
+// Live video is user-requested latency-critical work, even with no visible window.
+// The token belongs to the backend's streaming lifetime, not the menu application's lifetime.
+void *eye_activity_begin(void) { @autoreleasepool {
+ id token = [[NSProcessInfo processInfo]
+  beginActivityWithOptions:(NSActivityUserInitiated | NSActivityLatencyCritical)
+  reason:@"Remote Eye Contact live video"];
+ return (__bridge_retained void *)token;
+}}
+void eye_activity_end(void *handle) { @autoreleasepool {
+ if (handle) [[NSProcessInfo processInfo] endActivity:(__bridge_transfer id)handle];
+}}
+int eye_video_thread(void) {
+ return pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+}
 
 typedef struct { CMIODeviceID device; CMIOStreamID stream; CMSimpleQueueRef queue;
  CVPixelBufferPoolRef pool; CMVideoFormatDescriptionRef format; int width,height; } Sink;

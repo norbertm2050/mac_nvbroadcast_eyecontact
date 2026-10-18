@@ -2,6 +2,11 @@
 
 ## Unreleased — 2026-10-18
 
+- Recover Mac decoders at keyframes while retaining the RTSP session. Replace permanent software fallback after one decode error with bounded hardware retries, temporary software fallback and non-disruptive hardware probes. Refresh the connection if software decoding repeatedly fails too.
+- Record which video stage became stale so intermittent blank output can be diagnosed instead of inferred from frame-rate samples alone.
+- Reuse per-worker Mac pixel converters with bounded thread counts instead of creating and destroying automatic scaling thread pools for each frame.
+- Declare live video as latency-critical user-initiated work on macOS and set video-worker QoS while streaming. Release the activity on shutdown; do not change global energy settings.
+
 - Add optional direct CMIO sink output for a separately installed GhaustCam 1.0 extension on Mac, including device discovery after renaming. Keep OBS as the default and preserve backend selection when saving connection settings.
 - Keep processing and transport at 720p30; upscale only the local GhaustCam output to its advertised 1080p BGRA format. Bound the native queue and pixel-buffer pool to avoid accumulating stale frames.
 - Build and bundle the original native adapter; do not redistribute the third-party camera extension.

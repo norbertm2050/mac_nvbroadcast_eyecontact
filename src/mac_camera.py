@@ -17,6 +17,7 @@ import time
 import traceback
 import fcntl
 import av
+from av.video.reformatter import VideoReformatter
 import numpy as np
 import pyvirtualcam
 from settings import data_dir, load_config, rtsp_url, safe_error
@@ -25,10 +26,10 @@ ROOT = data_dir()
 from latest_frame import LatestFrame
 from video_pixels import uyvy_view
 from video_codec import mac_encoder_options
-from video_decode import decode_from_keyframe
+from resilient_decode import decode_resilient
+from mac_runtime import VideoActivity
 from network_ready import watch_network
 from video_readiness import VideoReadiness
-from av.codec.hwaccel import HWAccel
 
 import ctypes
 
@@ -125,6 +126,7 @@ def capture():
 
 
 def sender():
+    converter = VideoReformatter()
     url = rtsp_url(CONFIG, "raw")
     while not STOP.is_set():
         try:
@@ -158,8 +160,8 @@ def sender():
                         for i, b in enumerate(bits):
                             data[:20, i * 12 : (i + 1) * 12] = 255 if b else 0
                         frame = av.VideoFrame.from_ndarray(data, format="rgb24")
-                    frame = frame.reformat(
-                        width=CONFIG["width"], height=CONFIG["height"], format="nv12"
+                    frame = converter.reformat(
+                        frame, width=CONFIG["width"], height=CONFIG["height"], format="nv12", threads=1
                     )
                     frame.pict_type = av.video.frame.PictureType.NONE
                     frame.pts = pts
@@ -182,8 +184,8 @@ def sender():
 
 
 def receiver():
+    converter = VideoReformatter()
     url = rtsp_url(CONFIG, "processed")
-    hardware_failed = False
     while not STOP.is_set():
         try:
             options = {
@@ -195,26 +197,22 @@ def receiver():
                 "max_delay": "0",
                 "reorder_queue_size": "0",
             }
-            accel = (
-                "software"
-                if hardware_failed
-                else CONFIG.get("decode_acceleration", "software")
-            )
-            hw = (
-                HWAccel(accel, allow_software_fallback=True)
-                if accel != "software"
-                else None
-            )
-            with av.open(url, options=options, timeout=(4, 4), hwaccel=hw) as container:
+            accel = CONFIG.get("decode_acceleration", "software")
+            def decoder_event(**event):
+                clean = {k: safe_error(v) if isinstance(v, str) else v for k, v in event.items()}
+                bump("decoderEvents")
+                state(decoderEvent=clean)
+                note("Decoder: " + json.dumps(clean))
+
+            with av.open(url, options=options, timeout=(4, 4)) as container:
                 stream = container.streams.video[0]
-                stream.codec_context.thread_count = 1
                 state(receiverConnected=True, receiverError=None)
-                for frame in decode_from_keyframe(container, stream):
+                for frame, actual_accel in decode_resilient(container, stream, accel, decoder_event):
                     if STOP.is_set():
                         break
                     fmt = CONFIG.get("virtual_pixel_format", "yuv420p")
-                    converted = frame.reformat(
-                        width=CONFIG.get("output_width", CONFIG["width"]),
+                    converted = converter.reformat(
+                        frame, threads=2, width=CONFIG.get("output_width", CONFIG["width"]),
                         height=CONFIG.get("output_height", CONFIG["height"]), format=fmt
                     )
                     data = (
@@ -223,9 +221,7 @@ def receiver():
                         else converted.to_ndarray()
                     )
                     state(
-                        decodeAcceleration=accel
-                        if stream.codec_context.is_hwaccel
-                        else "software",
+                        decodeAcceleration=actual_accel,
                         virtualPixelFormat=fmt,
                     )
                     put("return", data)
@@ -259,13 +255,6 @@ def receiver():
                                         + "\n"
                                     )
         except Exception as e:
-            if accel != "software" and (
-                "avcodec_" in safe_error(e)
-                or "av_hwdevice" in safe_error(e)
-                or "hardware" in safe_error(e).lower()
-            ):
-                hardware_failed = True
-                state(decoderFallback=safe_error(e))
             state(receiverConnected=False, receiverError=safe_error(e))
             bump("reconnects")
             note("Receive reconnect: " + safe_error(e))
@@ -276,6 +265,7 @@ def virtual_camera():
     history = collections.deque()
     last = 0
     readiness = VideoReadiness(CONFIG["warmup_seconds"])
+    previous_fresh = None
     frame_driven = CONFIG.get("frame_driven_output", False)
     fmt = CONFIG.get("virtual_pixel_format", "yuv420p")
     if fmt == "uyvy422":
@@ -329,14 +319,24 @@ def virtual_camera():
             while history and history[0] < now - 2:
                 history.popleft()
             captured = get("capture")
-            fresh = (
-                item is not None
-                and now - item[0] < 0.75
-                and captured is not None
-                and now - captured[0] < 0.75
-                and STATE.get("senderConnected", False)
-                and now - STATE.get("lastSent", 0) < 0.75
-            )
+            ages = {
+                "return": now - item[0] if item else None,
+                "capture": now - captured[0] if captured else None,
+                "sender": now - STATE.get("lastSent", 0),
+            }
+            stale = [key for key, age in ages.items() if age is None or age >= 0.75]
+            if not STATE.get("senderConnected", False):
+                stale.append("senderDisconnected")
+            fresh = not stale
+            if fresh != previous_fresh:
+                if not fresh:
+                    bump("freshnessLosses")
+                    detail = {"stages": stale, "ageMs": {
+                        key: round(age * 1000, 1) if age is not None else None
+                        for key, age in ages.items()}}
+                    state(lastFreshnessLoss=detail)
+                    note("Video freshness lost: " + json.dumps(detail))
+                previous_fresh = fresh
             # At least 15 unique frames/s during warmup. Once ready, only
             # freshness (not a throughput dip) can blank the output.
             flowing = fresh and len(history) >= CONFIG["fps"]
@@ -403,8 +403,11 @@ def main():
     for sig in [signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, lambda *_: STOP.set())
     threading.Thread(target=monitor, daemon=True).start()
+    activity = None
     try:
-        state(phase="connecting")
+        activity = VideoActivity()
+        activity.video_thread()
+        state(phase="connecting", latencyCriticalActivity=True)
         rtsp_url(CONFIG, "raw")
         threading.Thread(
             target=watch_network,
@@ -412,8 +415,17 @@ def main():
                   lambda message: state(networkMessage=message)),
             daemon=True,
         ).start()
+        def run_video(worker):
+            try:
+                activity.video_thread()
+                worker()
+            except Exception as error:
+                state(phase="error", error=safe_error(error))
+                note("Video worker failed: " + safe_error(error))
+                STOP.set()
+
         for worker in [capture, sender, receiver]:
-            threading.Thread(target=worker, daemon=True).start()
+            threading.Thread(target=run_video, args=(worker,), daemon=True).start()
         virtual_camera()
     except Exception as e:
         state(phase="error", error=safe_error(e))
@@ -432,6 +444,8 @@ def main():
             (ROOT / "state/native-status.json").write_text(
                 json.dumps({"phase": "stopped", "updated": time.time()})
             )
+        if activity is not None:
+            activity.close()
         os._exit(1 if STATE["phase"] == "error" else 0)
 
 
