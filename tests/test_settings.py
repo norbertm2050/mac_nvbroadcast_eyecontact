@@ -3,12 +3,23 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from settings import valid_host, rtsp_url, safe_error, load_config, save_config
 
 
 class SettingsTests(unittest.TestCase):
+    def test_decoder_default_and_explicit_override(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, EYE_CONTACT_DATA_DIR=folder):
+            with patch('settings.sys.platform', 'darwin'):
+                self.assertEqual(load_config()['decode_acceleration'], 'software')
+                save_config({'decode_acceleration': 'videotoolbox'})
+                self.assertEqual(load_config()['decode_acceleration'], 'videotoolbox')
+            Path(folder, 'config.json').unlink()
+            with patch('settings.sys.platform', 'win32'):
+                self.assertEqual(load_config()['decode_acceleration'], 'd3d11va')
+
     def test_accept_ip_dns_ipv6(self):
         for host in ["192.0.2.10", "windows.example.ts.net", "2001:db8::1"]:
             self.assertEqual(valid_host(host), host)

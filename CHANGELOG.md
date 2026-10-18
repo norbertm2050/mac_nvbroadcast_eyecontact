@@ -2,6 +2,8 @@
 
 ## Unreleased — 2026-10-18
 
+- Default Mac return decoding to software at 720p after recurrent VideoToolbox decode failures in live tests. Keep hardware encoding and Windows acceleration; allow explicit `decode_acceleration: videotoolbox` opt-in with recovery.
+
 - Recover Mac decoders at keyframes while retaining the RTSP session. Replace permanent software fallback after one decode error with bounded hardware retries, temporary software fallback and non-disruptive hardware probes. Refresh the connection if software decoding repeatedly fails too.
 - Record which video stage became stale so intermittent blank output can be diagnosed instead of inferred from frame-rate samples alone.
 - Reuse per-worker Mac pixel converters with bounded thread counts instead of creating and destroying automatic scaling thread pools for each frame.

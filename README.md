@@ -11,7 +11,7 @@ flowchart LR
   A[Mac 摄像头] -->|VideoToolbox H.264| B[Windows 接收器]
   B --> C[OBS 虚拟摄像头驱动]
   C --> D[NVIDIA Broadcast · Eye Contact]
-  D -->|NVENC H.264| E[Mac 硬件解码]
+  D -->|NVENC H.264| E[Mac 回传解码]
   E --> F[OBS Virtual Camera]
   F --> G[会议或录制软件]
 ```
@@ -75,7 +75,7 @@ Mac 可使用单独安装并获系统批准的 **GhaustCam 1.0 摄像头扩展**
 
 ## 性能
 
-VideoToolbox 编码/解码、Windows D3D11VA 解码、NVENC 低延迟编码；两程目标码率各 6 Mbps。各阶段只保留最新帧，不堆积旧画面。断线后从关键帧重新解码，视频恢复并稳定预热后再输出。
+Mac VideoToolbox 编码、Windows D3D11VA 解码、NVENC 低延迟编码；两程目标码率各 6 Mbps。新版源码默认在 Mac 使用软件解码 720p 回传，避免实测中的 VideoToolbox 偶发解码错误；可在 Mac 配置中设置 `"decode_acceleration": "videotoolbox"` 试用硬件解码及自动恢复。各阶段只保留最新帧，不堆积旧画面。断线后从关键帧重新解码，视频恢复并稳定预热后再输出。
 
 发布前原生链路在一组 Apple Silicon Mac + RTX 3070 Laptop、局域网环境中测得约 **187 ms 中位数 / 238 ms P95**（120 秒，3504 个有效样本）。这是从 Mac 软件帧时间戳到虚拟摄像头读回的测量，**不包含传感器曝光、屏幕显示和会议软件缓冲**，也不是所有设备的保证值。便携发行包验证结果见 [测试记录](docs/VALIDATION.md)。
 

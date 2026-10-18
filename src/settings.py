@@ -55,7 +55,7 @@ def load_config():
         fps=30,
         bitrate=6000000,
         warmup_seconds=3,
-        decode_acceleration="d3d11va" if sys.platform == "win32" else "videotoolbox",
+        decode_acceleration=config.get("decode_acceleration", "d3d11va" if sys.platform == "win32" else "software"),
         frame_driven_output=True,
         virtual_pixel_format="yuv420p",
     )
