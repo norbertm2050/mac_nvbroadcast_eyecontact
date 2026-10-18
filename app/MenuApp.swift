@@ -153,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let port = Int(portField.stringValue), (1024...65535).contains(port), token.range(of:"^[a-fA-F0-9]{32}$", options:.regularExpression) != nil else {
             let alert = NSAlert(); alert.messageText = "请检查连接设置"; alert.informativeText = "填写 IP 或主机名（不含协议和路径）、1024–65535 的端口，以及 Windows 上的 32 位连接码。"; alert.runModal(); return
         }
-        config = ["host":host,"port":port,"token":token,"camera":cameraPopup.selectedItem?.representedObject as? String ?? "0"]
+        config.merge(["host":host,"port":port,"token":token,"camera":cameraPopup.selectedItem?.representedObject as? String ?? "0"]) { _, new in new }
         do {
             let url = home.appendingPathComponent("config.json")
             try JSONSerialization.data(withJSONObject:config,options:[.prettyPrinted,.sortedKeys]).write(to:url,options:.atomic)

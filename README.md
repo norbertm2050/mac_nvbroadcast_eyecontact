@@ -2,7 +2,7 @@
 
 <img src="assets/icon.png" width="112" alt="Remote Eye Contact icon">
 
-把 Mac 摄像头送到 Windows 的 NVIDIA Broadcast 做眼神矫正，再回传成 Mac 上的虚拟摄像头。**固定 720p / 30 fps，仅视频，不处理麦克风。**
+把 Mac 摄像头送到 Windows 的 NVIDIA Broadcast 做眼神矫正，再回传成 Mac 上的虚拟摄像头。**采集、传输和矫正固定 720p / 30 fps，仅视频，不处理麦克风。**
 
 Mac 用菜单栏应用，Windows 用一个服务控制窗口；运行时无需打开 OBS，也不需要 SSH、Python 或命令行。
 
@@ -50,6 +50,16 @@ Windows 必须保持登录到桌面、网络可达。远程桌面会话切换、
 5. 菜单只有一个切换项：运行时显示“停止眼神矫正”，停止后显示“启动眼神矫正”。授权及停止过程中禁用重复点击。停止后才能修改连接设置。
 
 退出 Mac 应用会释放 Mac 摄像头；Windows 服务独立运行，可在 Windows 点击“停止服务”释放其视频工作进程；该操作取消本次会话的自动重试，之后仍按自动启动设置在下次登录运行。关闭 Windows 控制窗口也会停止服务。
+
+### 可选：GhaustCam 直连输出（源码新版，实验性）
+
+Mac 可使用单独安装并获系统批准的 **GhaustCam 1.0 摄像头扩展**，替代 Mac 上的 OBS 输出驱动。无需自行签署摄像头扩展，也无需运行 GhaustCam 或 OBS 主界面。Windows 仍需要 OBS 虚拟摄像头驱动。本项目不捆绑 GhaustCam。
+
+退出 Remote Eye Contact 后，在本机配置文件 `~/Library/Application Support/Remote Eye Contact/config.json` 中增加 `"virtual_backend": "ghaust"`，保留已有连接设置，再启动应用。默认仍为 OBS；删除该字段或设为 `"obs"` 可恢复。设置窗口保存连接信息会保留此选项。
+
+该适配器直接写入扩展的 CMIO sink；扩展可改名，会议软件中选择改名后的设备即可，采集输入仍应选物理摄像头。不要同时启动其他向 GhaustCam 写画面的程序。当前适配依赖 GhaustCam 1.0 的自定义属性和格式，未来版本可能需要重新验证。
+
+**格式限制：**实测该版本仅公布 1920×1080 BGRA 输入，因此最终在 Mac 本地将 720p 放大到 1080p 输出；网络和眼神矫正仍是 720p30，不增加真实细节，并增加本地转换及内存传输开销。README 下述历史延迟数据不代表此后端；它尚未做完整的端到端延迟对比。当前 GitHub 已发布的旧版压缩包不包含此适配，需使用新版源码构建。
 
 ## 网络与隐私
 

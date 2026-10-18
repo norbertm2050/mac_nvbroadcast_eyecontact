@@ -59,6 +59,8 @@ def load_config():
         frame_driven_output=True,
         virtual_pixel_format="yuv420p",
     )
+    if sys.platform == "darwin" and defaults.get("virtual_backend") == "ghaust":
+        defaults.update(virtual_pixel_format="bgra", output_width=1920, output_height=1080)
     return defaults
 
 

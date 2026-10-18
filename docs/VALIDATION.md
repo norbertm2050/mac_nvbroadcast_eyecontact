@@ -40,3 +40,11 @@ Performance figures in the README are from the earlier optimized native pipeline
 - Windows waits for live input before opening Broadcast output and reopens after sustained input loss; brief input-status dips are debounced.
 - All 27 local tests passed, including the hardware encoder regression test. A 90-second runtime observation produced 160 steady-state samples (after excluding the first 10 seconds), all ready, with median received throughput 29.9 fps and no additional reconnects. The user confirmed normal moving images before the final jitter fix; this measurement checks pipeline state and throughput, not an independently remeasured end-to-end latency.
 - Diagnostic frames and machine-specific logs remain private and are excluded from source control and release assets.
+
+## 2026-10-18 optional GhaustCam direct output
+
+- Tested against the separately installed GhaustCam 1.0 extension. Renamed its device and verified discovery still works after its device UUID changes. An independent AVFoundation reader captured normal real returned video from the renamed device, without an OBS or GhaustCam GUI running.
+- The extension advertises 1920x1080 BGRA. A 720p sink submission did not produce the expected image; 1080p submission did. Processing and transport remain 720p30, with local upscaling only at output.
+- The first 90-second pipeline observation included startup retries and warmup. After reaching ready, all 145 sampled status records remained ready, median received throughput was 29.8 fps, and the reconnect count did not increase during that interval. This measures pipeline health, not continuous visual inspection or end-to-end latency.
+- A later decoder error triggered the existing software fallback. Restarting the application restored VideoToolbox decoding and the independent reader again obtained normal video. This backend is not a guarantee of uninterrupted hardware decoding or long-session stability.
+- All 30 local tests passed, including the optional hardware encoder regression. Bundle signature verification and checks for private deployment identifiers in source and the packaged Python archive passed. Diagnostic images and local connection configuration are not published.

@@ -3,8 +3,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PYTHON="${PYTHON:-python3}"
 "$PYTHON" scripts/sanitize-sysconfig.py
+clang -shared -fobjc-arc -O2 native/cmio_sink.m -o build/libeye_cmio.dylib \
+  -framework Foundation -framework CoreMediaIO -framework CoreMedia -framework CoreVideo
 "$PYTHON" -m PyInstaller --noconfirm --clean --onedir --name eye-backend \
-  --paths build/sanitized --paths src --collect-all av --collect-all pyvirtualcam --exclude-module tkinter \
+  --paths build/sanitized --paths src --add-binary "$PWD/build/libeye_cmio.dylib:." --collect-all av --collect-all pyvirtualcam --exclude-module tkinter \
   --exclude-module windows_app --exclude-module win_receiver --exclude-module win_sender \
   --distpath build/backend --workpath build/pyinstaller --specpath build src/backend.py
 APP="dist/Remote Eye Contact.app"

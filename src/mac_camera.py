@@ -214,7 +214,8 @@ def receiver():
                         break
                     fmt = CONFIG.get("virtual_pixel_format", "yuv420p")
                     converted = frame.reformat(
-                        width=CONFIG["width"], height=CONFIG["height"], format=fmt
+                        width=CONFIG.get("output_width", CONFIG["width"]),
+                        height=CONFIG.get("output_height", CONFIG["height"]), format=fmt
                     )
                     data = (
                         uyvy_view(converted)
@@ -290,17 +291,28 @@ def virtual_camera():
             if fmt == "yuv420p"
             else pyvirtualcam.PixelFormat.NV12
         )
+    elif fmt == "bgra":
+        blank = np.zeros((1080, 1920, 4), np.uint8)
+        blank[:, :, 3] = 255
+        pixel_format = None  # Direct CMIO backend receives BGRA without pyvirtualcam.
     else:
         blank = np.zeros((CONFIG["height"], CONFIG["width"], 3), np.uint8)
         pixel_format = pyvirtualcam.PixelFormat.RGB
-    with pyvirtualcam.Camera(
-        width=CONFIG["width"],
-        height=CONFIG["height"],
-        fps=CONFIG["fps"],
-        fmt=pixel_format,
-        backend="obs",
-    ) as cam:
+    if CONFIG.get("virtual_backend") == "ghaust":
+        from ghaust_camera import Camera
+        camera = Camera()
+    else:
+        camera = pyvirtualcam.Camera(
+            width=CONFIG["width"],
+            height=CONFIG["height"],
+            fps=CONFIG["fps"],
+            fmt=pixel_format,
+            backend="obs",
+        )
+    with camera as cam:
         state(virtualCamera=cam.device, phase="warming")
+        state(outputResolution=[CONFIG.get("output_width", CONFIG["width"]),
+                                CONFIG.get("output_height", CONFIG["height"])])
         while not STOP.is_set():
             item = (
                 LATEST["return"].wait(last, timeout=1 / CONFIG["fps"])

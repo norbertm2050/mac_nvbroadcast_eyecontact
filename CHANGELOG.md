@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — 2026-10-18
+
+- Add optional direct CMIO sink output for a separately installed GhaustCam 1.0 extension on Mac, including device discovery after renaming. Keep OBS as the default and preserve backend selection when saving connection settings.
+- Keep processing and transport at 720p30; upscale only the local GhaustCam output to its advertised 1080p BGRA format. Bound the native queue and pixel-buffer pool to avoid accumulating stale frames.
+- Build and bundle the original native adapter; do not redistribute the third-party camera extension.
+
 ## Unreleased — 2026-10-01
 
 - Capture Mac camera frames as UYVY before converting to NV12 for hardware encoding, fixing observed striped/corrupted input with direct NV12 capture. Expose capture format, dimensions and plane strides in local health status.
