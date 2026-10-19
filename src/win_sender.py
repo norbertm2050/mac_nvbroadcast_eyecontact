@@ -29,7 +29,9 @@ def watch_input():
 
 
 def capture():
-    capture_fps = CONFIG["fps"]
+    # Broadcast can accept a 15 fps request yet return only black frames.
+    # Keep its DirectShow contract at 30; pace NVENC independently.
+    capture_fps = 30
     while not (ROOT / "state/stop").exists():
         if not input_ready.wait(0.5):
             continue

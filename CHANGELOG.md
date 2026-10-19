@@ -2,6 +2,8 @@
 
 ## Unreleased — 2026-10-19
 
+- Keep Windows OBS/Broadcast camera interfaces at 30 fps even when transport is 15 fps. A successful 15 fps capture open and flowing frames were insufficient: the observed Broadcast return was uniformly black. Mark 15 fps experimental; restoring both configurations to 30 fps recovered real video.
+
 - Support matching optional 15 fps settings on both machines, with 30 fps camera-capture fallback and paced downstream encoding. Display the selected rate in the Mac menu.
 - Record redacted native FFmpeg error details in bounded diagnostics.
 

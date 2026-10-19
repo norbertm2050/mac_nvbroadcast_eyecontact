@@ -87,3 +87,8 @@ Performance figures in the README are from the earlier optimized native pipeline
 - A 120-second observation collected 120 health samples, including 109 ready samples after startup. Ready samples used VideoToolbox throughout, with median return throughput 14.9 fps and median Mac process CPU 22.5% (one core = 100%). No new freshness losses or decoder reset events occurred after the first ready sample. This is a short pipeline-health test, not continuous meeting-client visual validation or long-session certification.
 - Earlier 30 fps software observations had a 41.9% CPU median, but workload and timing were not controlled; this is not a rigorous efficiency benchmark. Camera capture and Broadcast inference work are not guaranteed to halve.
 - Windows readiness thresholds now scale with the selected rate instead of rejecting healthy 15 fps streams. All 45 tests passed, including the real hardware encoder regression.
+
+
+## Follow-up: 15 fps visual validation failed
+
+The preceding 15 fps health test did NOT establish usable video: subsequent investigation found normal raw uplink content but uniformly black processed frames with both software and hardware Mac decoders. Returning Windows camera interfaces to 30 fps initially produced a Broadcast placeholder; restoring both configurations to 30 fps and restarting Broadcast restored a real scene, independently decoded and visually inspected on Mac. VideoToolbox remained enabled. The 15 fps profile is experimental and must not be presented as validated or stable. Frame flow alone is insufficient acceptance evidence. No meeting-client visual confirmation is implied by the RTSP image check.
