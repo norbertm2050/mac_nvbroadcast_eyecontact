@@ -120,3 +120,9 @@ powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1
 测试：`python -m unittest discover -s tests -v`。编译产物写入 `dist/`，不进入 Git。
 
 本项目与 NVIDIA、OBS、Apple、Tailscale 无隶属关系。眼神矫正的质量、支持硬件和可用效果由 NVIDIA Broadcast 决定。
+
+### Optional 15 fps profile
+
+Stop both apps, set `"fps": 15` in each machine's `config.json`, then restart. The default remains 30 fps. Mac status displays the selected rate. If a camera or Broadcast rejects native 15 fps capture, capture falls back to 30 fps and only newest frames are encoded at 15 fps. This does not guarantee that Broadcast inference or camera capture work is halved. A 15 fps frame interval is about 67 ms: motion is less detailed and end-to-end latency is not guaranteed to improve.
+
+Mac can also select `"decode_acceleration": "videotoolbox"` with automatic recovery and software fallback. Hardware decoding does not improve compression quality. Redacted native FFmpeg errors are included in rotating diagnostics for future failure analysis.

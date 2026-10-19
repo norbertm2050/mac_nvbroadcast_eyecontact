@@ -77,11 +77,11 @@ try:
     last_item = 0
     frame_driven = CONFIG.get("frame_driven_output", False)
     with pyvirtualcam.Camera(
-        width=1280, height=720, fps=30, fmt=pyvirtualcam.PixelFormat.NV12, backend="obs"
+        width=1280, height=720, fps=CONFIG["fps"], fmt=pyvirtualcam.PixelFormat.NV12, backend="obs"
     ) as cam:
         while not (ROOT / "state/stop").exists():
             item = (
-                latest.wait(last_item, timeout=1 / 30)
+                latest.wait(last_item, timeout=1 / CONFIG["fps"])
                 if frame_driven
                 else latest.peek()
             )

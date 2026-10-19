@@ -52,7 +52,7 @@ def load_config():
     defaults.update(
         width=1280,
         height=720,
-        fps=30,
+        fps=15 if config.get("fps") == 15 else 30,
         bitrate=6000000,
         warmup_seconds=3,
         decode_acceleration=config.get("decode_acceleration", "d3d11va" if sys.platform == "win32" else "software"),

@@ -2,6 +2,9 @@
 
 ## Unreleased — 2026-10-19
 
+- Support matching optional 15 fps settings on both machines, with 30 fps camera-capture fallback and paced downstream encoding. Display the selected rate in the Mac menu.
+- Record redacted native FFmpeg error details in bounded diagnostics.
+
 - Add bounded, rotating per-second Mac diagnostics for capture, conversion, encoding, transport reads, decoding and virtual-camera submission. Record output transitions and process CPU without recording media or connection credentials.
 - Restore 720p output dimensions when switching from GhaustCam to OBS, including configurations with stale 1080p overrides.
 - Distinguish virtual-camera submission attempts from backend-reported drops. These counters do not certify delivery to meeting software.

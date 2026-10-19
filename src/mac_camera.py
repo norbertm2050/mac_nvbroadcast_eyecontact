@@ -85,17 +85,19 @@ def bump(key):
 
 
 def capture():
+    capture_fps = CONFIG["fps"]
     while not STOP.is_set():
         try:
             opts = {
                 "video_size": f"{CONFIG['width']}x{CONFIG['height']}",
-                "framerate": str(CONFIG["fps"]),
+                "framerate": str(capture_fps),
                 "pixel_format": CONFIG.get("capture_pixel_format", "uyvy422"),
             }
             with av.open(
                 CONFIG["camera"] + ":none", format="avfoundation", options=opts
             ) as device:
-                state(cameraOpen=True, captureError=None)
+                state(cameraOpen=True, captureError=None, captureFpsRequested=capture_fps)
+                next_capture = 0.0
                 last_capture = 0
                 while not STOP.is_set():
                     try:
@@ -109,6 +111,10 @@ def capture():
                                 state(capturePixelFormat=frame.format.name,
                                       captureSize=[frame.width, frame.height],
                                       capturePlaneStrides=[p.line_size for p in frame.planes])
+                                now = time.monotonic()
+                                if now + 0.002 < next_capture:
+                                    continue
+                                next_capture = max(next_capture + 1 / CONFIG["fps"], now + 0.5 / CONFIG["fps"])
                                 put("capture", frame)
                                 bump("captureFrames")
                                 last_capture = time.monotonic()
@@ -127,6 +133,7 @@ def capture():
                             )
                         )
         except Exception as e:
+            capture_fps = 30
             state(cameraOpen=False, captureError=safe_error(e))
             note("Capture: " + safe_error(e))
             STOP.wait(2)
@@ -448,6 +455,16 @@ def main():
     for sig in [signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, lambda *_: STOP.set())
     DIAGNOSTICS.start(ROOT / "logs", CONFIG)
+    # Preserve native VideoToolbox/FFmpeg error details without synchronous
+    # disk writes from decoder callback threads or authenticated URLs.
+    class CodecLogHandler(logging.Handler):
+        def emit(self, record):
+            DIAGNOSTICS.event("ffmpeg", text=safe_error(record.getMessage()))
+    codec_logger = logging.getLogger("libav")
+    codec_logger.addHandler(CodecLogHandler())
+    codec_logger.setLevel(logging.ERROR)
+    codec_logger.propagate = False
+    av.logging.set_level(av.logging.ERROR)
     threading.Thread(target=monitor, daemon=True).start()
     activity = None
     try:

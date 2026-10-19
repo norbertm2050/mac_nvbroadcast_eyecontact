@@ -179,7 +179,7 @@ class Window:
         )
         ttk.Label(
             frame,
-            text="NVIDIA Broadcast 眼神矫正 · 720p / 30 fps",
+            text=f"NVIDIA Broadcast 眼神矫正 · 720p / {self.config['fps']} fps",
             padding=(0, 4, 0, 15),
         ).pack(anchor="w")
         ips = sorted(
@@ -460,8 +460,8 @@ class Window:
                         self.spawn(role, worker_command(role))
                 ready = (
                     bool(rx.get("fresh"))
-                    and rx.get("fps", 0) > 22
-                    and tx.get("fps", 0) > 22
+                    and rx.get("fps", 0) > self.config["fps"] * 0.73
+                    and tx.get("fps", 0) > self.config["fps"] * 0.73
                     and min(rx.get("updated", 0), tx.get("updated", 0))
                     > time.time() - 5
                 )

@@ -29,17 +29,19 @@ def watch_input():
 
 
 def capture():
+    capture_fps = CONFIG["fps"]
     while not (ROOT / "state/stop").exists():
         if not input_ready.wait(0.5):
             continue
         try:
             status["captureOpened"] = time.time()
+            status["captureFpsRequested"] = capture_fps
             with av.open(
                 "video=Camera (NVIDIA Broadcast)",
                 format="dshow",
                 options={
                     "video_size": "1280x720",
-                    "framerate": "30",
+                    "framerate": str(capture_fps),
                     "rtbufsize": "4000000",
                 },
             ) as camera:
@@ -52,6 +54,9 @@ def capture():
                     status["captureError"] = None
         except Exception as e:
             status["captureError"] = safe_error(e)
+            # Some Broadcast versions only advertise 30 fps capture. Encoding
+            # is still paced at the selected rate if a 15 fps open is rejected.
+            capture_fps = 30
             time.sleep(1)
 
 
@@ -87,14 +92,14 @@ while not (ROOT / "state/stop").exists():
             options={"rtsp_transport": "tcp", "flush_packets": "1"},
             timeout=(5, 5),
         ) as output:
-            stream = output.add_stream("h264_nvenc", rate=30)
+            stream = output.add_stream("h264_nvenc", rate=CONFIG["fps"])
             stream.width = 1280
             stream.height = 720
             stream.pix_fmt = "nv12"
-            stream.bit_rate = 6000000
+            stream.bit_rate = CONFIG["bitrate"]
             stream.codec_context.max_b_frames = 0
-            stream.codec_context.gop_size = 30
-            stream.codec_context.time_base = fractions.Fraction(1, 30)
+            stream.codec_context.gop_size = CONFIG["fps"]
+            stream.codec_context.time_base = fractions.Fraction(1, CONFIG["fps"])
             stream.options = {
                 "preset": "p2",
                 "tune": "ull",
@@ -106,6 +111,7 @@ while not (ROOT / "state/stop").exists():
             }
             last = 0
             pts = 0
+            next_encode = 0.0
             while not (ROOT / "state/stop").exists():
                 item = latest.wait(last, timeout=1)
                 if item is None:
@@ -113,10 +119,14 @@ while not (ROOT / "state/stop").exists():
                 last, frame = item
                 if not input_ready.is_set() or time.monotonic() - last > 0.5:
                     continue
+                now = time.monotonic()
+                if now + 0.002 < next_encode:
+                    continue
+                next_encode = max(next_encode + 1 / CONFIG["fps"], now + 0.5 / CONFIG["fps"])
                 frame = frame.reformat(format="nv12")
                 frame.pict_type = av.video.frame.PictureType.NONE
                 frame.pts = pts
-                frame.time_base = fractions.Fraction(1, 30)
+                frame.time_base = fractions.Fraction(1, CONFIG["fps"])
                 pts += 1
                 for packet in stream.encode(frame):
                     output.mux(packet)

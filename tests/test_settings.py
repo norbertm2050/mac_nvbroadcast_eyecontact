@@ -20,6 +20,13 @@ class SettingsTests(unittest.TestCase):
             result = load_config()
             self.assertEqual((result['output_width'], result['output_height'], result['virtual_pixel_format']), (1280, 720, 'yuv420p'))
 
+    def test_optional_15_fps_profile(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, EYE_CONTACT_DATA_DIR=folder):
+            save_config({"fps": 15})
+            self.assertEqual(load_config()["fps"], 15)
+            save_config({"fps": 0})
+            self.assertEqual(load_config()["fps"], 30)
+
     def test_decoder_default_and_explicit_override(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, EYE_CONTACT_DATA_DIR=folder):
             with patch('settings.sys.platform', 'darwin'):

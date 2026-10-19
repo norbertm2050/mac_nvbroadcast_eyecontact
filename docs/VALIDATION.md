@@ -79,3 +79,11 @@ Performance figures in the README are from the earlier optimized native pipeline
 - Stable return conversion took approximately 0.2–0.4 ms in sampled intervals. Stalls affected several local stages simultaneously; the logs do not establish a single root cause or prove the network is responsible.
 - A separate 60-second live VideoToolbox decoding probe decoded 1,738 frames without decoder errors, with one gap of 347 ms. This short test does not supersede earlier long-session hardware failures. Software remains the default Mac decoder; hardware encoding and Windows acceleration remain enabled.
 - All 44 tests passed, including the optional real hardware encoder regression. Packaged Python archive privacy scan and bundle signature verification passed. Meeting-client delivery and uninterrupted long-session operation remain unverified for this build.
+
+
+## 2026-10-19 optional 15 fps and Mac hardware decoding
+
+- Both local configurations selected 15 fps; Mac selected VideoToolbox decoding with existing recovery and software fallback. The Mac camera rejected native 720p15, so capture fell back to 30 fps with newest-frame selection before 15 fps uplink encoding.
+- A 120-second observation collected 120 health samples, including 109 ready samples after startup. Ready samples used VideoToolbox throughout, with median return throughput 14.9 fps and median Mac process CPU 22.5% (one core = 100%). No new freshness losses or decoder reset events occurred after the first ready sample. This is a short pipeline-health test, not continuous meeting-client visual validation or long-session certification.
+- Earlier 30 fps software observations had a 41.9% CPU median, but workload and timing were not controlled; this is not a rigorous efficiency benchmark. Camera capture and Broadcast inference work are not guaranteed to halve.
+- Windows readiness thresholds now scale with the selected rate instead of rejecting healthy 15 fps streams. All 45 tests passed, including the real hardware encoder regression.

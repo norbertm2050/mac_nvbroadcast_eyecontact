@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard state == .running else { return }
         guard let data = try? Data(contentsOf: home.appendingPathComponent("state/native-status.json")), let s = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
         let phase = s["phase"] as? String ?? "starting"
-        let names = ["ready":"眼神矫正已就绪 · 720p30","starting":"启动中…","connecting":"连接 Windows…","warming":"视频预热中…","reconnecting":"等待 Windows 视频…","stopped":"已停止","error":"启动失败，请查看日志"]
+        let names = ["ready":"眼神矫正已就绪 · 720p\(s["fps"] as? Int ?? 30)","starting":"启动中…","connecting":"连接 Windows…","warming":"视频预热中…","reconnecting":"等待 Windows 视频…","stopped":"已停止","error":"启动失败，请查看日志"]
         statusLine.title = names[phase] ?? phase
         if phase != "ready", let message = s["networkMessage"] as? String, !message.isEmpty { statusLine.title = message }
         item.button?.title = phase == "ready" ? "◉ Eye" : (phase == "error" ? "! Eye" : "… Eye")
@@ -130,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             tokenField.frame = NSRect(x:24,y:180,width:500,height:26);content.addSubview(tokenField)
             label("Mac 摄像头",144)
             cameraPopup.frame = NSRect(x:24,y:110,width:500,height:28); content.addSubview(cameraPopup)
-            label("固定输出 720p30；只处理视频。先启动 Windows 端服务。",70)
+            label("输出 720p（15/30 fps）；只处理视频。先启动 Windows 端服务。",70)
             let button = NSButton(title:"保存并启动",target:self,action:#selector(save));button.bezelStyle = .rounded; button.frame = NSRect(x:385,y:22,width:142,height:32);content.addSubview(button)
             window = w; w.center()
         }
