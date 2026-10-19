@@ -37,3 +37,4 @@ class Camera:
         # A full bounded queue / pool drops this frame rather than building latency.
         if result not in (0, 1, -6689):
             raise RuntimeError(f'GhaustCam frame submission failed ({result})')
+        return result == 0

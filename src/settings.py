@@ -58,6 +58,8 @@ def load_config():
         decode_acceleration=config.get("decode_acceleration", "d3d11va" if sys.platform == "win32" else "software"),
         frame_driven_output=True,
         virtual_pixel_format="yuv420p",
+        output_width=1280,
+        output_height=720,
     )
     if sys.platform == "darwin" and defaults.get("virtual_backend") == "ghaust":
         defaults.update(virtual_pixel_format="bgra", output_width=1920, output_height=1080)

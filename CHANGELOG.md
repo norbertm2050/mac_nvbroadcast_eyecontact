@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — 2026-10-19
+
+- Add bounded, rotating per-second Mac diagnostics for capture, conversion, encoding, transport reads, decoding and virtual-camera submission. Record output transitions and process CPU without recording media or connection credentials.
+- Restore 720p output dimensions when switching from GhaustCam to OBS, including configurations with stale 1080p overrides.
+- Distinguish virtual-camera submission attempts from backend-reported drops. These counters do not certify delivery to meeting software.
+
 ## Unreleased — 2026-10-18
 
 - Default Mac return decoding to software at 720p after recurrent VideoToolbox decode failures in live tests. Keep hardware encoding and Windows acceleration; allow explicit `decode_acceleration: videotoolbox` opt-in with recovery.

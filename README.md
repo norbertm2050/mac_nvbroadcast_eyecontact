@@ -71,6 +71,8 @@ Mac 可使用单独安装并获系统批准的 **GhaustCam 1.0 摄像头扩展**
 - 视频只在你配置的两台电脑间传输；应用不录制视频、不上传云服务、不采集音频。日志只记录运行状态和错误，但可能包含你填写的地址或设备名称；分享日志前请检查。
 - Mac 配置/日志：`~/Library/Application Support/Remote Eye Contact/`。
 - Windows 配置/日志：`%LOCALAPPDATA%\Remote Eye Contact\`。
+- Mac 详细诊断：`logs/video-diagnostics.jsonl`，每秒记录各阶段耗时、帧率、重连、输出黑帧原因及进程 CPU；自动轮转，约 96 MiB 上限，不保存图像或音频。排查时请保留对应时间段及轮转文件。虚拟相机“提交成功”不等于会议软件已收到画面。
+- 稳定性和性能优先时建议使用默认 OBS 虚拟摄像头驱动：全程 720p30，无需打开 OBS 界面，会议软件选择 **OBS Virtual Camera**。
 - 更换连接码：停止两端应用，删除 Windows 配置目录中的 `config.json` 后重新打开，随后在 Mac 更新连接码。不要把这两个本地配置目录提交到 Git。
 
 ## 性能

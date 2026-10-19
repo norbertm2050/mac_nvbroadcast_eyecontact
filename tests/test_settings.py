@@ -10,6 +10,16 @@ from settings import valid_host, rtsp_url, safe_error, load_config, save_config
 
 
 class SettingsTests(unittest.TestCase):
+    def test_switching_from_ghaust_restores_output_dimensions(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, EYE_CONTACT_DATA_DIR=folder), patch('settings.sys.platform', 'darwin'):
+            config = dict(virtual_backend='ghaust', output_width=1920, output_height=1080)
+            save_config(config)
+            self.assertEqual(load_config()['output_width'], 1920)
+            config['virtual_backend'] = 'obs'
+            save_config(config)
+            result = load_config()
+            self.assertEqual((result['output_width'], result['output_height'], result['virtual_pixel_format']), (1280, 720, 'yuv420p'))
+
     def test_decoder_default_and_explicit_override(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, EYE_CONTACT_DATA_DIR=folder):
             with patch('settings.sys.platform', 'darwin'):

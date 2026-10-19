@@ -11,6 +11,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import resource
 import signal
 import threading
 import time
@@ -28,6 +29,7 @@ from video_pixels import uyvy_view
 from video_codec import mac_encoder_options
 from resilient_decode import decode_resilient
 from mac_runtime import VideoActivity
+from video_diagnostics import VideoDiagnostics
 from network_ready import watch_network
 from video_readiness import VideoReadiness
 
@@ -56,6 +58,7 @@ STATE = {
 LOCK = threading.Lock()
 LATEST = {key: LatestFrame() for key in ["capture", "return"]}
 START = time.monotonic()
+DIAGNOSTICS = VideoDiagnostics()
 
 
 def state(**values):
@@ -64,7 +67,8 @@ def state(**values):
 
 
 def note(message):
-    print(time.strftime("%H:%M:%S"), message, flush=True)
+    DIAGNOSTICS.event("message", text=safe_error(message))
+    print(time.strftime("%Y-%m-%d %H:%M:%S"), message, flush=True)
 
 
 def put(key, value):
@@ -95,7 +99,10 @@ def capture():
                 last_capture = 0
                 while not STOP.is_set():
                     try:
-                        for packet in device.demux(video=0):
+                        packets = iter(device.demux(video=0))
+                        while not STOP.is_set():
+                            with DIAGNOSTICS.span("captureRead"):
+                                packet = next(packets)
                             for frame in packet.decode():
                                 if STOP.is_set():
                                     return
@@ -160,15 +167,19 @@ def sender():
                         for i, b in enumerate(bits):
                             data[:20, i * 12 : (i + 1) * 12] = 255 if b else 0
                         frame = av.VideoFrame.from_ndarray(data, format="rgb24")
-                    frame = converter.reformat(
-                        frame, width=CONFIG["width"], height=CONFIG["height"], format="nv12", threads=1
-                    )
+                    with DIAGNOSTICS.span("uplinkConvert"):
+                        frame = converter.reformat(
+                            frame, width=CONFIG["width"], height=CONFIG["height"], format="nv12", threads=1
+                        )
                     frame.pict_type = av.video.frame.PictureType.NONE
                     frame.pts = pts
                     frame.time_base = fractions.Fraction(1, CONFIG["fps"])
                     pts += 1
-                    for packet in stream.encode(frame):
-                        output.mux(packet)
+                    with DIAGNOSTICS.span("uplinkEncode"):
+                        packets = stream.encode(frame)
+                    for packet in packets:
+                        with DIAGNOSTICS.span("uplinkMux"):
+                            output.mux(packet)
                         bump("encodedPackets")
                     bump("sentFrames")
                     state(
@@ -184,6 +195,7 @@ def sender():
 
 
 def receiver():
+    last_luma_sample = 0
     converter = VideoReformatter()
     url = rtsp_url(CONFIG, "processed")
     while not STOP.is_set():
@@ -207,23 +219,29 @@ def receiver():
             with av.open(url, options=options, timeout=(4, 4)) as container:
                 stream = container.streams.video[0]
                 state(receiverConnected=True, receiverError=None)
-                for frame, actual_accel in decode_resilient(container, stream, accel, decoder_event):
+                for frame, actual_accel in decode_resilient(container, stream, accel, decoder_event, diagnostics=DIAGNOSTICS):
                     if STOP.is_set():
                         break
                     fmt = CONFIG.get("virtual_pixel_format", "yuv420p")
-                    converted = converter.reformat(
-                        frame, threads=2, width=CONFIG.get("output_width", CONFIG["width"]),
-                        height=CONFIG.get("output_height", CONFIG["height"]), format=fmt
-                    )
-                    data = (
-                        uyvy_view(converted)
-                        if fmt == "uyvy422"
-                        else converted.to_ndarray()
-                    )
+                    with DIAGNOSTICS.span("returnConvert"):
+                        converted = converter.reformat(
+                            frame, threads=2, width=CONFIG.get("output_width", CONFIG["width"]),
+                            height=CONFIG.get("output_height", CONFIG["height"]), format=fmt
+                        )
+                        data = (
+                            uyvy_view(converted)
+                            if fmt == "uyvy422"
+                            else converted.to_ndarray()
+                        )
                     state(
                         decodeAcceleration=actual_accel,
                         virtualPixelFormat=fmt,
                     )
+                    if time.monotonic() - last_luma_sample >= 1:
+                        sample = data[::32, ::32, :3] if fmt == "bgra" else data[:CONFIG["height"]:32, ::32]
+                        state(returnSampleMean=round(float(np.mean(sample)), 2),
+                              returnSampleStd=round(float(np.std(sample)), 2))
+                        last_luma_sample = time.monotonic()
                     put("return", data)
                     bump("receivedFrames")
                     if CONFIG.get("diagnostic_timestamp"):
@@ -266,6 +284,7 @@ def virtual_camera():
     last = 0
     readiness = VideoReadiness(CONFIG["warmup_seconds"])
     previous_fresh = None
+    previous_output = None
     frame_driven = CONFIG.get("frame_driven_output", False)
     fmt = CONFIG.get("virtual_pixel_format", "yuv420p")
     if fmt == "uyvy422":
@@ -346,11 +365,26 @@ def virtual_camera():
                 # avoiding another independently phased 30 Hz software timer.
                 if frame_driven and not new_frame:
                     continue
-                cam.send(item[1])
+                output_kind = "live"
+                with DIAGNOSTICS.span("virtualSend"):
+                    accepted = cam.send(item[1])
                 state(phase="ready", returnAgeMs=round((now - item[0]) * 1000, 1))
             else:
-                cam.send(blank)
+                output_kind = "blank"
+                with DIAGNOSTICS.span("virtualSend"):
+                    accepted = cam.send(blank)
+                bump("blankFrames")
                 state(phase="warming" if fresh else "reconnecting")
+            if accepted is False:
+                bump("virtualDroppedFrames")
+            else:
+                bump("virtualSubmittedFrames")
+            state(lastOutputKind=output_kind, outputSubmission="dropped" if accepted is False else "submitted")
+            if output_kind != previous_output:
+                DIAGNOSTICS.event("output_transition", output=output_kind, staleStages=stale,
+                                  ageMs={k: round(v*1000, 1) if v is not None else None for k,v in ages.items()},
+                                  fresh=fresh, flowing=flowing)
+                previous_output = output_kind
             bump("virtualFrames")
             if not frame_driven:
                 cam.sleep_until_next_frame()
@@ -358,9 +392,11 @@ def virtual_camera():
 
 def monitor():
     before = {}
+    previous_cpu = time.process_time()
     previous = time.monotonic()
     while not STOP.wait(1):
         now = time.monotonic()
+        cpu = time.process_time()
         with LOCK:
             snapshot = dict(STATE)
             for key in [
@@ -385,11 +421,20 @@ def monitor():
             resolution=[CONFIG["width"], CONFIG["height"]],
             fps=CONFIG["fps"],
             bitrate=CONFIG["bitrate"],
+            processCpuPercent=round((cpu-previous_cpu)/max(now-previous, .001)*100, 1),
+            processPeakRssMiB=round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1048576, 1),
         )
         tmp = ROOT / "state/native-status.tmp"
         tmp.write_text(json.dumps(snapshot, indent=2))
         tmp.replace(ROOT / "state/native-status.json")
+        try:
+            health = {k: v for k, v in snapshot.items() if not k.endswith("Error") and k not in ["error", "networkMessage"]}
+            DIAGNOSTICS.write({"kind": "health", "intervalSeconds": round(now-previous, 3),
+                               "health": health, "timing": DIAGNOSTICS.snapshot()})
+        except Exception as error:
+            state(diagnosticsError=safe_error(error))
         previous = now
+        previous_cpu = cpu
 
 
 def main():
@@ -402,6 +447,7 @@ def main():
     (ROOT / "state/native.pid").write_text(str(os.getpid()))
     for sig in [signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, lambda *_: STOP.set())
+    DIAGNOSTICS.start(ROOT / "logs", CONFIG)
     threading.Thread(target=monitor, daemon=True).start()
     activity = None
     try:
@@ -444,6 +490,8 @@ def main():
             (ROOT / "state/native-status.json").write_text(
                 json.dumps({"phase": "stopped", "updated": time.time()})
             )
+        DIAGNOSTICS.write({"kind": "shutdown", "phase": STATE["phase"], "timing": DIAGNOSTICS.snapshot()})
+        DIAGNOSTICS.close()
         if activity is not None:
             activity.close()
         os._exit(1 if STATE["phase"] == "error" else 0)

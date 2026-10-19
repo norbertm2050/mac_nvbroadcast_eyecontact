@@ -1,4 +1,5 @@
 """Recover a decoder at keyframes without tearing down a healthy RTSP session."""
+from contextlib import nullcontext
 import time
 import av
 from av.codec.hwaccel import HWAccel
@@ -14,7 +15,7 @@ def make_decoder(stream, acceleration):
 
 
 def decode_resilient(container, stream, acceleration='videotoolbox', report=None,
-                     factory=make_decoder, clock=time.monotonic, retry_seconds=60):
+                     factory=make_decoder, clock=time.monotonic, retry_seconds=60, diagnostics=None):
     """Yield (frame, actual_acceleration); probe hardware without dropping good software output.
 
     Three failures without 150 successful frames trigger a software cooldown.
@@ -27,7 +28,13 @@ def decode_resilient(container, stream, acceleration='videotoolbox', report=None
     software_failures = 0
     good_frames = 0
     retry_at = 0
-    for packet in container.demux(stream):
+    packets = iter(container.demux(stream))
+    while True:
+        try:
+            with diagnostics.span("returnRead") if diagnostics else nullcontext():
+                packet = next(packets)
+        except StopIteration:
+            return
         # demux emits an empty drain packet at EOF; it is not a live video frame.
         if not packet.size:
             continue
@@ -55,7 +62,8 @@ def decode_resilient(container, stream, acceleration='videotoolbox', report=None
         try:
             if decoder is None:
                 decoder = factory(stream, mode)
-            frames = list(decoder.decode(packet))
+            with diagnostics.span("returnDecode") if diagnostics else nullcontext():
+                frames = list(decoder.decode(packet))
         except av.error.FFmpegError as error:
             decoder = None
             good_frames = 0

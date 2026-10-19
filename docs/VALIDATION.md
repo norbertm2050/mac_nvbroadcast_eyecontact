@@ -70,3 +70,12 @@ Performance figures in the README are from the earlier optimized native pipeline
 - Windows status was read successfully 236 times, approximately every 30 seconds. This interval cannot attribute second-scale interruptions to a particular Windows stage. Several Mac interruptions coincided with reduced capture/send/receive throughput; the available evidence does not establish a single network or hardware root cause.
 - Backend RSS was 169.8 MiB initially, 142.1 MiB at the end, and at most 186.3 MiB in sampled measurements. No sustained memory growth was observed. Sampled `ps` CPU values had a median of 58.3% and a maximum of 111.0% (100% represents approximately one logical CPU); these are process-average estimates, not instantaneous peak utilization.
 - The two-hour findings supersede any inference of long-session stability from the earlier three-minute pass. Further work should correlate per-stage frame timing with continuous output-frame diagnostics before claiming that blackouts are fixed.
+
+
+## 2026-10-19 OBS 720p diagnostics (not a stability certification)
+
+- Switched the test installation from GhaustCam 1080p BGRA to OBS 720p I420 without opening OBS. Added rotating per-stage timing and output-transition logs.
+- A 319-second observation contained 307 health samples, 279 ready samples, median received throughput 29.8 fps and median process CPU 41.9% (100% represents one core). Ten additional freshness-loss events occurred after the first sample. Build and diagnostic activity shared the machine during part of this interval; this is not a controlled performance comparison.
+- Stable return conversion took approximately 0.2–0.4 ms in sampled intervals. Stalls affected several local stages simultaneously; the logs do not establish a single root cause or prove the network is responsible.
+- A separate 60-second live VideoToolbox decoding probe decoded 1,738 frames without decoder errors, with one gap of 347 ms. This short test does not supersede earlier long-session hardware failures. Software remains the default Mac decoder; hardware encoding and Windows acceleration remain enabled.
+- All 44 tests passed, including the optional real hardware encoder regression. Packaged Python archive privacy scan and bundle signature verification passed. Meeting-client delivery and uninterrupted long-session operation remain unverified for this build.
