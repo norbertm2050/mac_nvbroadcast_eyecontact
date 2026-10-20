@@ -2,6 +2,8 @@
 
 ## Unreleased — 2026-10-20
 
+- Retain Windows Broadcast capture for up to 20 seconds of input interruption, avoiding unnecessary DirectShow reopen and warmup after transient Mac stalls. Stale-input blanking is unchanged. Keep capture-handle lifetime status accurate and expose capture-open counts.
+
 - Integrate the Broadcast 2.3 local MCP gateway for idempotent OBS 720p30 and Eye Contact configuration, with live capability checks and explicit file-processing conflict handling.
 - Add authenticated SSH remote status, prepare and restore-live commands using the portable Windows executable, plus a managed local-forward helper for external MCP clients; keep the gateway loopback-only. Serialize control operations and record configuration results separately from picture health.
 - Flag sustained uniformly black Mac return frames instead of reporting picture readiness from frame flow alone.

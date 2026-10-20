@@ -14,7 +14,10 @@ input_ready = threading.Event()
 
 
 def watch_input():
-    readiness = CaptureReadiness()
+    # Retain the expensive DirectShow/Broadcast capture across brief uplink
+    # stalls. The receiver still blanks stale input after 0.75 s; this is
+    # connection lifetime hysteresis, not permission to show stale video.
+    readiness = CaptureReadiness(disconnect_grace=20)
     while not (ROOT / "state/stop").exists():
         ready = readiness.update(
             receiver_is_live(ROOT / "logs/native-receiver.json"), time.monotonic()
@@ -23,7 +26,7 @@ def watch_input():
             input_ready.set()
         else:
             input_ready.clear()
-            status.pop("captureOpened", None)
+            # captureOpened describes the actual open handle, not input readiness.
         status["waitingForInput"] = not ready
         time.sleep(0.5)
 
@@ -37,6 +40,7 @@ def capture():
             continue
         try:
             status["captureOpened"] = time.time()
+            status["captureOpens"] = status.get("captureOpens", 0) + 1
             status["captureFpsRequested"] = capture_fps
             with av.open(
                 "video=Camera (NVIDIA Broadcast)",
@@ -60,6 +64,8 @@ def capture():
             # is still paced at the selected rate if a 15 fps open is rejected.
             capture_fps = 30
             time.sleep(1)
+        finally:
+            status.pop("captureOpened", None)
 
 
 def monitor():

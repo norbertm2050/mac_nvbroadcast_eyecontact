@@ -17,6 +17,19 @@ class ReadinessTests(unittest.TestCase):
         self.assertFalse(gate.update(True, 20))
         self.assertTrue(gate.update(True, 23))
 
+    def test_broadcast_capture_survives_incident_length_stall(self):
+        gate = CaptureReadiness(disconnect_grace=20)
+        self.assertFalse(gate.update(True, 0))
+        self.assertTrue(gate.update(True, 3))
+        for second in range(4, 21):
+            self.assertTrue(gate.update(False, second))
+        # Fresh input resumes immediately without another capture warmup.
+        self.assertTrue(gate.update(True, 21))
+        self.assertTrue(gate.update(False, 40))
+        self.assertFalse(gate.update(False, 41))
+        self.assertFalse(gate.update(True, 42))
+        self.assertTrue(gate.update(True, 45))
+
     def test_missing_malformed_and_stale_samples_are_not_live(self):
         with tempfile.TemporaryDirectory() as folder:
             p = Path(folder) / 'receiver.json'
