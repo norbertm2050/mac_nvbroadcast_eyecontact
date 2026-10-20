@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — 2026-10-20
+
+- Integrate the Broadcast 2.3 local MCP gateway for idempotent OBS 720p30 and Eye Contact configuration, with live capability checks and explicit file-processing conflict handling.
+- Add authenticated SSH remote status, prepare and restore-live commands using the portable Windows executable, plus a managed local-forward helper for external MCP clients; keep the gateway loopback-only. Serialize control operations and record configuration results separately from picture health.
+- Flag sustained uniformly black Mac return frames instead of reporting picture readiness from frame flow alone.
+- Use the documented hidden Broadcast launch argument.
+
 ## Unreleased — 2026-10-19
 
 - Keep Windows OBS/Broadcast camera interfaces at 30 fps even when transport is 15 fps. A successful 15 fps capture open and flowing frames were insufficient: the observed Broadcast return was uniformly black. Mark 15 fps experimental; restoring both configurations to 30 fps recovered real video.

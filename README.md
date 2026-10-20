@@ -128,3 +128,30 @@ powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1
 Stop both apps, set `"fps": 15` in each machine's `config.json`, then restart. The default remains 30 fps. Mac status displays the selected rate. Mac camera capture falls back to 30 fps if native 15 fps is rejected. Windows OBS/Broadcast interfaces always use 30 fps for compatibility, and only newest frames are encoded at 15 fps. This does not guarantee that Broadcast inference or camera capture work is halved. A 15 fps frame interval is about 67 ms: motion is less detailed and end-to-end latency is not guaranteed to improve.
 
 Mac can also select `"decode_acceleration": "videotoolbox"` with automatic recovery and software fallback. Hardware decoding does not improve compression quality. Redacted native FFmpeg errors are included in rotating diagnostics for future failure analysis.
+
+### Broadcast 2.3 control and remote maintenance
+
+With Broadcast 2.3 running, the Windows controller checks its local MCP gateway every 15 seconds while fresh Mac input is present. It selects the advertised OBS 1280x720/30 mode, disables extra camera effects, and enables Eye Contact. Correct settings cause no setter calls or camera restarts. Audio settings are untouched. Running file-processing jobs block automatic configuration rather than being silently interrupted. Older Broadcast builds can still transport video but cannot perform this automatic check.
+
+The local gateway remains loopback-only. From another computer with authorized SSH access, use the bundled executable through the helper (Python 3 is required only on the calling computer):
+
+```sh
+python3 scripts/broadcast-remote.py user@windows-host --app 'C:\path\RemoteEyeContact.exe' --action status
+python3 scripts/broadcast-remote.py user@windows-host --app 'C:\path\RemoteEyeContact.exe' --action prepare
+```
+
+Add `--identity /path/to/key` if needed. `status` reads devices and enabled camera effects; `prepare` applies the video-only profile. `--action restore-live` explicitly restores the Live snapshot, potentially pausing unfinished file processing, then applies the profile. SSH setup is separate; no login password or private key is bundled, no additional listening port is opened, and no MCP gateway is exposed to the LAN.
+
+The Windows executable also supports `--role broadcast --action status --result C:\path\result.json`. Result JSON carries `ok` and either `result` or `error`; check `ok`, not just process exit. Configuration checks are saved to `state/broadcast-control.json`; individual SSH command result files remain in the same per-user state directory. Gateway server identity and supported modes are verified; unknown device IDs or modes are not guessed.
+
+A Mac stream that remains uniformly black for at least three seconds now displays a warning while continuing to forward frames. This heuristic cannot certify eye correction or distinguish every placeholder image; it does not restart cameras or blank a working picture.
+
+For a Mac/Linux MCP client that needs an HTTP endpoint, an SSH tunnel is also supported:
+
+```sh
+python3 scripts/broadcast-tunnel.py user@windows-host --identity /path/to/key --local-port 18101
+# Register http://127.0.0.1:18101/gateway in your MCP client.
+python3 scripts/broadcast-tunnel.py user@windows-host --identity /path/to/key --local-port 18101 --stop
+```
+
+The helper discovers the current Windows gateway port, starts an SSH background master bound to local loopback, and supports explicit shutdown. Verify the MCP server identifies itself as `nvidia-broadcast`. Restart the helper after a Windows reboot, lost SSH connection, or gateway-port change; it does not install a login service or automatically reopen a failed tunnel. The Windows application's automatic configuration uses the local gateway independently of this maintenance tunnel.

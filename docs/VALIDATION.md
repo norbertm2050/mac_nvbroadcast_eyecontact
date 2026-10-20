@@ -92,3 +92,13 @@ Performance figures in the README are from the earlier optimized native pipeline
 ## Follow-up: 15 fps visual validation failed
 
 The preceding 15 fps health test did NOT establish usable video: subsequent investigation found normal raw uplink content but uniformly black processed frames with both software and hardware Mac decoders. Returning Windows camera interfaces to 30 fps initially produced a Broadcast placeholder; restoring both configurations to 30 fps and restarting Broadcast restored a real scene, independently decoded and visually inspected on Mac. VideoToolbox remained enabled. The 15 fps profile is experimental and must not be presented as validated or stable. Frame flow alone is insufficient acceptance evidence. No meeting-client visual confirmation is implied by the RTSP image check.
+
+
+## 2026-10-20 Broadcast 2.3 integration
+
+- Inspected installed Broadcast 2.3.0.13104 and successfully initialized its loopback MCP gateway, verifying server identity `nvidia-broadcast` version 2.3.0. Live device discovery advertised OBS input only at 1280x720/30 fps.
+- Tested remote `status` and idempotent `prepare` from Mac through authenticated SSH using the newly packaged Windows executable. Repeated preparation returned no changes; the controller's background configuration check also succeeded. Only Eye Contact was enabled among camera effects.
+- Independently tested HTTP MCP through an SSH local forward, including the tunnel helper's start/stop/restart cycle and remote preparation without changes. No LAN MCP listener or firewall port was added.
+- Updated both installed applications, verified the Mac signature and scanned the Python archive/source for private deployment identifiers. All 59 Mac tests passed, including hardware encoding; all 14 new control/picture tests passed on Windows. File-processing restore behavior and partial failures have unit coverage; no real user file-processing job was interrupted to test them.
+- A real processed RTSP frame was independently decoded and visually inspected as a camera scene rather than a blank or NVIDIA placeholder. This does not certify continuous meeting-client output or gaze-correction accuracy.
+- A subsequent 120-sample observation spanning 119.7 seconds was ready throughout, with median return throughput 29.8 fps and median process CPU 34.5% of one core. There were zero additional freshness losses, zero uniform-black flags, and zero decoder events. This short test is not long-session stability certification or an end-to-end latency benchmark.

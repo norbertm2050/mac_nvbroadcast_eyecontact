@@ -9,12 +9,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--role",
-        choices=["mac", "receiver", "sender", "windows"],
+        choices=["mac", "receiver", "sender", "windows", "broadcast"],
         default="windows" if sys.platform == "win32" else "mac",
     )
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--autostart", action="store_true")
     parser.add_argument("--minimized", action="store_true")
+    parser.add_argument("--action", choices=["status", "prepare", "restore-live"], default="status")
+    parser.add_argument("--result", help="JSON result path for headless Broadcast control")
     args = parser.parse_args()
     for name in (
         "http_proxy",
@@ -25,6 +27,21 @@ def main():
         "ALL_PROXY",
     ):
         os.environ.pop(name, None)
+    if args.role == "broadcast":
+        import json
+        import time
+        from pathlib import Path
+        from settings import atomic_json, data_dir, safe_error
+        from broadcast_control import control
+        output = Path(args.result) if args.result else data_dir() / "state/broadcast-command.json"
+        try:
+            result = dict(ok=True, updated=time.time(), result=control(args.action))
+        except Exception as error:
+            result = dict(ok=False, updated=time.time(), error=safe_error(error))
+        atomic_json(output, result)
+        if sys.stdout:
+            print(json.dumps(result))
+        return
     if args.self_test:
         import av, numpy, pyvirtualcam
 

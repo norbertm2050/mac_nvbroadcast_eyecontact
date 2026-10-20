@@ -30,6 +30,7 @@ from video_codec import mac_encoder_options
 from resilient_decode import decode_resilient
 from mac_runtime import VideoActivity
 from video_diagnostics import VideoDiagnostics
+from picture_health import PictureHealth
 from network_ready import watch_network
 from video_readiness import VideoReadiness
 
@@ -203,6 +204,7 @@ def sender():
 
 def receiver():
     last_luma_sample = 0
+    picture_health = PictureHealth()
     converter = VideoReformatter()
     url = rtsp_url(CONFIG, "processed")
     while not STOP.is_set():
@@ -247,7 +249,8 @@ def receiver():
                     if time.monotonic() - last_luma_sample >= 1:
                         sample = data[::32, ::32, :3] if fmt == "bgra" else data[:CONFIG["height"]:32, ::32]
                         state(returnSampleMean=round(float(np.mean(sample)), 2),
-                              returnSampleStd=round(float(np.std(sample)), 2))
+                              returnSampleStd=round(float(np.std(sample)), 2),
+                              returnUniformBlack=picture_health.update(float(np.mean(sample)), float(np.std(sample)), time.monotonic(), rgb=fmt == "bgra"))
                         last_luma_sample = time.monotonic()
                     put("return", data)
                     bump("receivedFrames")
@@ -375,7 +378,7 @@ def virtual_camera():
                 output_kind = "live"
                 with DIAGNOSTICS.span("virtualSend"):
                     accepted = cam.send(item[1])
-                state(phase="ready", returnAgeMs=round((now - item[0]) * 1000, 1))
+                state(phase="no_picture" if STATE.get("returnUniformBlack") else "ready", returnAgeMs=round((now - item[0]) * 1000, 1))
             else:
                 output_kind = "blank"
                 with DIAGNOSTICS.span("virtualSend"):

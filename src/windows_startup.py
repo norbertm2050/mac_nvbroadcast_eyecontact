@@ -63,7 +63,7 @@ def ensure_broadcast():
     )
     if result.returncode == 1:
         subprocess.Popen(
-            [str(path), "--process-start-args", "--launch-hidden"],
+            [str(path), "--launch-hidden"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

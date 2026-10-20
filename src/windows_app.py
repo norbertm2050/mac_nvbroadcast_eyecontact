@@ -12,6 +12,8 @@ import sys
 import time
 import threading
 from windows_startup import enable_startup, startup_enabled, ensure_broadcast
+from broadcast_control import control
+from capture_readiness import receiver_is_live
 import tkinter as tk
 from tkinter import messagebox, ttk
 import webbrowser
@@ -282,8 +284,12 @@ class Window:
         def check():
             try:
                 self.broadcast_error = ensure_broadcast()
+                if not self.broadcast_error and self.want_running and receiver_is_live(self.home / "logs/native-receiver.json"):
+                    result = control("prepare")
+                    atomic_json(self.home / "state/broadcast-control.json", dict(result, updated=time.time()))
             except Exception as error:
-                self.broadcast_error = str(error)
+                self.broadcast_error = "Broadcast configuration check: " + str(error)
+                atomic_json(self.home / "state/broadcast-control.json", dict(phase="unavailable", error=str(error), updated=time.time()))
             finally:
                 self.broadcast_pending = False
 

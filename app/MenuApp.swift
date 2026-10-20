@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard state == .running else { return }
         guard let data = try? Data(contentsOf: home.appendingPathComponent("state/native-status.json")), let s = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
         let phase = s["phase"] as? String ?? "starting"
-        let names = ["ready":"眼神矫正已就绪 · 720p\(s["fps"] as? Int ?? 30)","starting":"启动中…","connecting":"连接 Windows…","warming":"视频预热中…","reconnecting":"等待 Windows 视频…","stopped":"已停止","error":"启动失败，请查看日志"]
+        let names = ["ready":"眼神矫正已就绪 · 720p\(s["fps"] as? Int ?? 30)","no_picture":"回传持续全黑，请检查 Broadcast 输入","starting":"启动中…","connecting":"连接 Windows…","warming":"视频预热中…","reconnecting":"等待 Windows 视频…","stopped":"已停止","error":"启动失败，请查看日志"]
         statusLine.title = names[phase] ?? phase
         if phase != "ready", let message = s["networkMessage"] as? String, !message.isEmpty { statusLine.title = message }
         item.button?.title = phase == "ready" ? "◉ Eye" : (phase == "error" ? "! Eye" : "… Eye")
