@@ -2,6 +2,8 @@
 
 ## Unreleased — 2026-10-25
 
+- Increase crop tick density to every 10%, widen the slider for aligned readable labels, and strengthen magnetic capture to 3.5 percentage points.
+
 - Show native slider ticks and percentage labels at 20% intervals; align magnetic anchors with those visible ticks while retaining free adjustment between them.
 
 - Replace discrete Mac crop choices with a continuous 20–100% area slider, magnetic anchors at the previous choices, live updates throttled to 10 Hz, and migration of saved choices.
