@@ -2,6 +2,8 @@
 
 ## Unreleased — 2026-10-25
 
+- Show native slider ticks and percentage labels at 20% intervals; align magnetic anchors with those visible ticks while retaining free adjustment between them.
+
 - Replace discrete Mac crop choices with a continuous 20–100% area slider, magnetic anchors at the previous choices, live updates throttled to 10 Hz, and migration of saved choices.
 
 - Add persistent live centered camera area cropping (full, 1/2, 1/3, 1/4, 1/5) to the Mac menu. Crop packed YUV before encoding without an RGB round trip, preserve aspect ratio and the 720p output contract, and report the applied rectangle in diagnostics.

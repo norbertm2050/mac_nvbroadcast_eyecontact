@@ -42,16 +42,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self; menu.addItem(settingsItem)
         let crop = NSMenuItem(title: "摄像头视野（中心裁剪）", action: nil, keyEquivalent: "")
         let cropMenu = NSMenu(); cropMenu.autoenablesItems = false
-        let view = NSView(frame: NSRect(x:0,y:0,width:310,height:90))
-        cropLabel.frame = NSRect(x:16,y:62,width:280,height:20); view.addSubview(cropLabel)
+        let view = NSView(frame: NSRect(x:0,y:0,width:310,height:110))
+        cropLabel.frame = NSRect(x:16,y:84,width:280,height:20); view.addSubview(cropLabel)
         let legacy = config["crop_area_denominator"] as? Double ?? 1
         let saved = config["crop_area_percent"] as? Double ?? 100 / max(1, legacy)
         cropSlider = NSSlider(value:saved.isFinite ? min(100,max(20,saved)) : 100, minValue:20,maxValue:100,target:self,action:#selector(selectCrop(_:)))
         cropSlider.isContinuous = true
-        cropSlider.frame = NSRect(x:16,y:30,width:278,height:26); view.addSubview(cropSlider)
-        let hint = NSTextField(labelWithString:"磁吸：20% · 25% · 33.3% · 50% · 100%")
-        hint.font = .systemFont(ofSize:11); hint.textColor = .secondaryLabelColor
-        hint.frame = NSRect(x:16,y:8,width:280,height:18); view.addSubview(hint)
+        cropSlider.numberOfTickMarks = 5
+        cropSlider.tickMarkPosition = .below
+        cropSlider.allowsTickMarkValuesOnly = false
+        cropSlider.frame = NSRect(x:16,y:36,width:278,height:38); view.addSubview(cropSlider)
+        for index in 0..<5 {
+            let label = NSTextField(labelWithString:"\((index+1)*20)%")
+            label.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular)
+            label.textColor = .labelColor; label.alignment = .center
+            let center = cropSlider.frame.minX + 10 + CGFloat(index) * (cropSlider.frame.width - 20) / 4
+            label.frame = NSRect(x:center-22,y:14,width:44,height:18)
+            view.addSubview(label)
+        }
         updateCropLabel()
         let control = NSMenuItem(); control.view = view; cropMenu.addItem(control)
         crop.submenu = cropMenu; menu.addItem(crop)
@@ -80,8 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func selectCrop(_ sender: NSSlider) {
         let value = sender.doubleValue
-        let anchors = [20.0,25.0,100.0/3.0,50.0,100.0]
-        if let anchor = anchors.min(by: {abs($0-value) < abs($1-value)}), abs(anchor-value) <= 1.0 {
+        let anchors = [20.0,40.0,60.0,80.0,100.0]
+        if let anchor = anchors.min(by: {abs($0-value) < abs($1-value)}), abs(anchor-value) <= 2.0 {
             sender.doubleValue = anchor
         }
         updateCropLabel(); cropDirty = true
