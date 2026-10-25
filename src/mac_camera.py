@@ -22,7 +22,7 @@ from av.video.reformatter import VideoReformatter
 import numpy as np
 import pyvirtualcam
 from settings import data_dir, load_config, rtsp_url, safe_error
-from camera_crop import crop_denominator, crop_frame
+from camera_crop import LiveCropSelection, crop_frame
 
 ROOT = data_dir()
 from latest_frame import LatestFrame
@@ -142,6 +142,7 @@ def capture():
 
 
 def sender():
+    crop_selection = LiveCropSelection(ROOT / "config.json", CONFIG)
     converter = VideoReformatter()
     url = rtsp_url(CONFIG, "raw")
     while not STOP.is_set():
@@ -177,9 +178,9 @@ def sender():
                             data[:20, i * 12 : (i + 1) * 12] = 255 if b else 0
                         frame = av.VideoFrame.from_ndarray(data, format="rgb24")
                     with DIAGNOSTICS.span("uplinkConvert"):
-                        denominator = crop_denominator(CONFIG.get("crop_area_denominator", 1))
-                        frame, rect = crop_frame(frame, denominator)
-                        state(cropAreaDenominator=denominator, cropRect=list(rect))
+                        percent = crop_selection.read()
+                        frame, rect = crop_frame(frame, percent)
+                        state(cropAreaPercent=percent, cropRect=list(rect))
                         frame = converter.reformat(
                             frame, width=CONFIG["width"], height=CONFIG["height"], format="nv12", threads=1
                         )
@@ -409,12 +410,6 @@ def monitor():
     previous_cpu = time.process_time()
     previous = time.monotonic()
     while not STOP.wait(1):
-        # Only this option is live; connection/codec changes still require restart.
-        try:
-            live = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
-            CONFIG["crop_area_denominator"] = crop_denominator(live.get("crop_area_denominator", 1))
-        except (OSError, ValueError):
-            pass  # Retain the selection during an incomplete/external config write.
         now = time.monotonic()
         cpu = time.process_time()
         with LOCK:

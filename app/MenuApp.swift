@@ -13,7 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var statusLine = NSMenuItem(title: "已停止", action: nil, keyEquivalent: "")
     var toggleItem = NSMenuItem(title: "启动眼神矫正", action: #selector(toggle), keyEquivalent: "")
     var settingsItem = NSMenuItem(title: "连接设置…", action: #selector(settings), keyEquivalent: ",")
-    var cropItems: [NSMenuItem] = []
+    var cropSlider: NSSlider!
+    var cropLabel = NSTextField(labelWithString: "")
+    var cropTimer: Timer?
+    var cropDirty = false
     var window: NSWindow?
     var hostField = NSTextField()
     var portField = NSTextField()
@@ -39,14 +42,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self; menu.addItem(settingsItem)
         let crop = NSMenuItem(title: "摄像头视野（中心裁剪）", action: nil, keyEquivalent: "")
         let cropMenu = NSMenu(); cropMenu.autoenablesItems = false
-        for denominator in 1...5 {
-            let title = denominator == 1 ? "完整画面" : "中心 1/\(denominator) 面积"
-            let entry = NSMenuItem(title: title, action: #selector(selectCrop(_:)), keyEquivalent: "")
-            entry.tag = denominator; entry.target = self
-            entry.state = (config["crop_area_denominator"] as? Int ?? 1) == denominator ? .on : .off
-            cropItems.append(entry); cropMenu.addItem(entry)
-        }
+        let view = NSView(frame: NSRect(x:0,y:0,width:310,height:90))
+        cropLabel.frame = NSRect(x:16,y:62,width:280,height:20); view.addSubview(cropLabel)
+        let legacy = config["crop_area_denominator"] as? Double ?? 1
+        let saved = config["crop_area_percent"] as? Double ?? 100 / max(1, legacy)
+        cropSlider = NSSlider(value:saved.isFinite ? min(100,max(20,saved)) : 100, minValue:20,maxValue:100,target:self,action:#selector(selectCrop(_:)))
+        cropSlider.isContinuous = true
+        cropSlider.frame = NSRect(x:16,y:30,width:278,height:26); view.addSubview(cropSlider)
+        let hint = NSTextField(labelWithString:"磁吸：20% · 25% · 33.3% · 50% · 100%")
+        hint.font = .systemFont(ofSize:11); hint.textColor = .secondaryLabelColor
+        hint.frame = NSRect(x:16,y:8,width:280,height:18); view.addSubview(hint)
+        updateCropLabel()
+        let control = NSMenuItem(); control.view = view; cropMenu.addItem(control)
         crop.submenu = cropMenu; menu.addItem(crop)
+        cropTimer = Timer(timeInterval:0.1,repeats:true) { [weak self] _ in self?.persistCrop() }
+        RunLoop.main.add(cropTimer!, forMode:.common)
         for (title, selector) in [("打开运行日志",#selector(logs)),("使用说明",#selector(help)),("退出",#selector(quit))] {
             let entry = NSMenuItem(title: title, action: selector, keyEquivalent: ""); entry.target = self; menu.addItem(entry)
         }
@@ -65,16 +75,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.isEnabled = state == .stopped
     }
 
-    @objc func selectCrop(_ sender: NSMenuItem) {
+    func updateCropLabel() {
+        cropLabel.stringValue = String(format:"保留中心面积：%.1f%%",cropSlider.doubleValue)
+    }
+    @objc func selectCrop(_ sender: NSSlider) {
+        let value = sender.doubleValue
+        let anchors = [20.0,25.0,100.0/3.0,50.0,100.0]
+        if let anchor = anchors.min(by: {abs($0-value) < abs($1-value)}), abs(anchor-value) <= 1.0 {
+            sender.doubleValue = anchor
+        }
+        updateCropLabel(); cropDirty = true
+    }
+    func persistCrop() {
+        guard cropDirty else { return }
         var updated = config
-        updated["crop_area_denominator"] = sender.tag
+        updated["crop_area_percent"] = cropSlider.doubleValue
+        updated.removeValue(forKey:"crop_area_denominator")
         do {
             let url = home.appendingPathComponent("config.json")
             try JSONSerialization.data(withJSONObject:updated,options:[.prettyPrinted,.sortedKeys]).write(to:url,options:.atomic)
             try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
-            config = updated
-            for entry in cropItems { entry.state = entry.tag == sender.tag ? .on : .off }
-        } catch { NSAlert(error:error).runModal() }
+            config = updated; cropDirty = false
+        } catch { cropDirty = false; NSAlert(error:error).runModal() }
     }
 
     @objc func toggle() { if state == .running { stop() } else if state == .stopped { start() } }
@@ -192,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func help() { NSWorkspace.shared.open(URL(string:"https://github.com/norbertm2050/mac_nvbroadcast_eyecontact#readme")!) }
     @objc func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply {
+        persistCrop()
         quitting = true
         if worker?.isRunning == true { stop(); return .terminateLater }
         return .terminateNow
