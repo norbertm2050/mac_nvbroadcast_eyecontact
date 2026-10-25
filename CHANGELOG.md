@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — 2026-10-25
+
+- Add persistent live centered camera area cropping (full, 1/2, 1/3, 1/4, 1/5) to the Mac menu. Crop packed YUV before encoding without an RGB round trip, preserve aspect ratio and the 720p output contract, and report the applied rectangle in diagnostics.
+
 ## Unreleased — 2026-10-20
 
 - Retain Windows Broadcast capture for up to 20 seconds of input interruption, avoiding unnecessary DirectShow reopen and warmup after transient Mac stalls. Stale-input blanking is unchanged. Keep capture-handle lifetime status accurate and expose capture-open counts.

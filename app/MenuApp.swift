@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var statusLine = NSMenuItem(title: "已停止", action: nil, keyEquivalent: "")
     var toggleItem = NSMenuItem(title: "启动眼神矫正", action: #selector(toggle), keyEquivalent: "")
     var settingsItem = NSMenuItem(title: "连接设置…", action: #selector(settings), keyEquivalent: ",")
+    var cropItems: [NSMenuItem] = []
     var window: NSWindow?
     var hostField = NSTextField()
     var portField = NSTextField()
@@ -36,6 +37,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusLine.isEnabled = false; menu.addItem(statusLine); menu.addItem(.separator())
         toggleItem.target = self; menu.addItem(toggleItem)
         settingsItem.target = self; menu.addItem(settingsItem)
+        let crop = NSMenuItem(title: "摄像头视野（中心裁剪）", action: nil, keyEquivalent: "")
+        let cropMenu = NSMenu(); cropMenu.autoenablesItems = false
+        for denominator in 1...5 {
+            let title = denominator == 1 ? "完整画面" : "中心 1/\(denominator) 面积"
+            let entry = NSMenuItem(title: title, action: #selector(selectCrop(_:)), keyEquivalent: "")
+            entry.tag = denominator; entry.target = self
+            entry.state = (config["crop_area_denominator"] as? Int ?? 1) == denominator ? .on : .off
+            cropItems.append(entry); cropMenu.addItem(entry)
+        }
+        crop.submenu = cropMenu; menu.addItem(crop)
         for (title, selector) in [("打开运行日志",#selector(logs)),("使用说明",#selector(help)),("退出",#selector(quit))] {
             let entry = NSMenuItem(title: title, action: selector, keyEquivalent: ""); entry.target = self; menu.addItem(entry)
         }
@@ -52,6 +63,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .stopping: toggleItem.title = "正在停止…"; toggleItem.isEnabled = false
         }
         settingsItem.isEnabled = state == .stopped
+    }
+
+    @objc func selectCrop(_ sender: NSMenuItem) {
+        var updated = config
+        updated["crop_area_denominator"] = sender.tag
+        do {
+            let url = home.appendingPathComponent("config.json")
+            try JSONSerialization.data(withJSONObject:updated,options:[.prettyPrinted,.sortedKeys]).write(to:url,options:.atomic)
+            try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
+            config = updated
+            for entry in cropItems { entry.state = entry.tag == sender.tag ? .on : .off }
+        } catch { NSAlert(error:error).runModal() }
     }
 
     @objc func toggle() { if state == .running { stop() } else if state == .stopped { start() } }
