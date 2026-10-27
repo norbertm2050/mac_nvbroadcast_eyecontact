@@ -13,6 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var statusLine = NSMenuItem(title: "已停止", action: nil, keyEquivalent: "")
     var toggleItem = NSMenuItem(title: "启动眼神矫正", action: #selector(toggle), keyEquivalent: "")
     var settingsItem = NSMenuItem(title: "连接设置…", action: #selector(settings), keyEquivalent: ",")
+    var devicesMenu = NSMenu()
+    var pendingDevice: [String: Any]?
+    var deviceNameField = NSTextField()
     var cropSlider: NSSlider!
     var cropLabel = NSTextField(labelWithString: "")
     var cropTimer: Timer?
@@ -34,12 +37,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         }
         if let data = try? Data(contentsOf: home.appendingPathComponent("config.json")), let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { config = value }
+        rememberDevice()
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = "○ Eye"
         let menu = NSMenu(); menu.autoenablesItems = false
         statusLine.isEnabled = false; menu.addItem(statusLine); menu.addItem(.separator())
         toggleItem.target = self; menu.addItem(toggleItem)
         settingsItem.target = self; menu.addItem(settingsItem)
+        let devices = NSMenuItem(title:"Windows 设备",action:nil,keyEquivalent:"")
+        devicesMenu.autoenablesItems = false; devices.submenu = devicesMenu; menu.addItem(devices)
+        rebuildDevicesMenu()
         let crop = NSMenuItem(title: "摄像头视野（中心裁剪）", action: nil, keyEquivalent: "")
         let cropMenu = NSMenu(); cropMenu.autoenablesItems = false
         let view = NSView(frame: NSRect(x:0,y:0,width:430,height:110))
@@ -73,6 +80,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if (config["host"] as? String ?? "").isEmpty { settings() } else { start() }
     }
 
+    func rememberDevice() {
+        guard let host = config["host"] as? String, !host.isEmpty else { return }
+        let port = config["port"] as? Int ?? 8554
+        var profiles = config["devices"] as? [[String:Any]] ?? []
+        var profile: [String:Any] = ["host":host,"port":port,"token":config["token"] as? String ?? "",
+                                     "name":config["device_name"] as? String ?? host]
+        if let i = profiles.firstIndex(where: {($0["host"] as? String) == host && ($0["port"] as? Int ?? 8554) == port}) {
+            if config["device_name"] == nil { profile["name"] = profiles[i]["name"] ?? host }
+            profiles[i] = profile
+        } else { profiles.append(profile) }
+        config["devices"] = profiles
+    }
+    func writeConfig() throws {
+        let url = home.appendingPathComponent("config.json")
+        try JSONSerialization.data(withJSONObject:config,options:[.prettyPrinted,.sortedKeys]).write(to:url,options:.atomic)
+        try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
+    }
+    func rebuildDevicesMenu() {
+        devicesMenu.removeAllItems()
+        for profile in config["devices"] as? [[String:Any]] ?? [] {
+            let host = profile["host"] as? String ?? ""
+            let name = profile["name"] as? String ?? host
+            let port = profile["port"] as? Int ?? 8554
+            let entry = NSMenuItem(title:"\(name) · \(host):\(port)",action:#selector(selectDevice(_:)),keyEquivalent:"")
+            entry.target = self; entry.representedObject = profile
+            entry.state = host == config["host"] as? String && port == (config["port"] as? Int ?? 8554) ? .on : .off
+            entry.isEnabled = state != .authorizing && state != .stopping && !quitting
+            devicesMenu.addItem(entry)
+        }
+        devicesMenu.addItem(.separator())
+        let add = NSMenuItem(title:"添加设备…",action:#selector(addDevice),keyEquivalent:"")
+        add.target = self; add.isEnabled = state == .stopped; devicesMenu.addItem(add)
+    }
+    @objc func addDevice() {
+        settings(); hostField.stringValue = ""; tokenField.stringValue = ""; deviceNameField.stringValue = ""
+    }
+    @objc func selectDevice(_ sender: NSMenuItem) {
+        guard !quitting, state == .running || state == .stopped,
+              let profile = sender.representedObject as? [String:Any] else { return }
+        if profile["host"] as? String == config["host"] as? String && (profile["port"] as? Int ?? 8554) == (config["port"] as? Int ?? 8554) { return }
+        persistCrop(); rememberDevice()
+        if state == .running { pendingDevice = profile; stop() }
+        else { applyDevice(profile, restart:false) }
+    }
+    func applyDevice(_ profile:[String:Any], restart:Bool) {
+        let previous = config
+        config["host"] = profile["host"]; config["port"] = profile["port"]
+        config["token"] = profile["token"]; config["device_name"] = profile["name"]
+        do {
+            try writeConfig(); rebuildDevicesMenu()
+            if restart { start() }
+        } catch { config = previous; rebuildDevicesMenu(); NSAlert(error:error).runModal() }
+    }
+
     func updateControls() {
         switch state {
         case .stopped: toggleItem.title = "启动眼神矫正"; toggleItem.isEnabled = true
@@ -81,6 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .stopping: toggleItem.title = "正在停止…"; toggleItem.isEnabled = false
         }
         settingsItem.isEnabled = state == .stopped
+        rebuildDevicesMenu()
     }
 
     func updateCropLabel() {
@@ -150,6 +212,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.button?.title = expected ? "○ Eye" : "! Eye"; updateControls()
         }
         if state == .stopping, let p = worker, p.isRunning, Date() > stopDeadline { kill(p.processIdentifier, SIGKILL) }
+        if state == .stopped, let profile = pendingDevice, !quitting {
+            pendingDevice = nil; applyDevice(profile,restart:true)
+        }
         if quitting && worker?.isRunning != true { NSApp.reply(toApplicationShouldTerminate: true); NSApp.terminate(nil); return }
         guard state == .running else { return }
         guard let data = try? Data(contentsOf: home.appendingPathComponent("state/native-status.json")), let s = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
@@ -170,12 +235,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func settings() {
         guard state == .stopped else { return }
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x:0,y:0,width:550,height:325), styleMask:[.titled,.closable], backing:.buffered, defer:false)
+            let w = NSWindow(contentRect: NSRect(x:0,y:0,width:550,height:385), styleMask:[.titled,.closable], backing:.buffered, defer:false)
             w.title = "Remote Eye Contact · 连接设置"; w.isReleasedWhenClosed = false
             let content = w.contentView!
             func label(_ text: String, _ y: CGFloat) {
                 let l = NSTextField(labelWithString:text); l.frame = NSRect(x:24,y:y,width:500,height:22); content.addSubview(l)
             }
+            label("设备名称（可选，便于区分多台 Windows）",337)
+            deviceNameField.frame = NSRect(x:24,y:306,width:500,height:26); content.addSubview(deviceNameField)
             label("Windows 地址（局域网 IP 或 Tailscale 主机名）",277)
             hostField.frame = NSRect(x:24,y:246,width:395,height:26); hostField.placeholderString = "例如 192.168.1.100";content.addSubview(hostField)
             portField.frame = NSRect(x:431,y:246,width:94,height:26); portField.placeholderString = "8554"; content.addSubview(portField)
@@ -187,6 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let button = NSButton(title:"保存并启动",target:self,action:#selector(save));button.bezelStyle = .rounded; button.frame = NSRect(x:385,y:22,width:142,height:32);content.addSubview(button)
             window = w; w.center()
         }
+        deviceNameField.stringValue = config["device_name"] as? String ?? ""
         hostField.stringValue = config["host"] as? String ?? ""
         portField.stringValue = String(config["port"] as? Int ?? 8554)
         tokenField.stringValue = config["token"] as? String ?? ""
@@ -206,7 +274,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let port = Int(portField.stringValue), (1024...65535).contains(port), token.range(of:"^[a-fA-F0-9]{32}$", options:.regularExpression) != nil else {
             let alert = NSAlert(); alert.messageText = "请检查连接设置"; alert.informativeText = "填写 IP 或主机名（不含协议和路径）、1024–65535 的端口，以及 Windows 上的 32 位连接码。"; alert.runModal(); return
         }
+        persistCrop(); rememberDevice()
+        let name = deviceNameField.stringValue.trimmingCharacters(in:.whitespacesAndNewlines)
+        config["device_name"] = name.isEmpty ? host : name
         config.merge(["host":host,"port":port,"token":token,"camera":cameraPopup.selectedItem?.representedObject as? String ?? "0"]) { _, new in new }
+        rememberDevice()
         do {
             let url = home.appendingPathComponent("config.json")
             try JSONSerialization.data(withJSONObject:config,options:[.prettyPrinted,.sortedKeys]).write(to:url,options:.atomic)

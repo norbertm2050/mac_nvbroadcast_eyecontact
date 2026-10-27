@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — 2026-10-27
+
+- Add saved Windows device profiles with names, per-device connection credentials, automatic migration of the existing connection, and orderly stop/start switching from the Mac menu.
+
 ## Unreleased — 2026-10-25
 
 - Increase crop tick density to every 10%, widen the slider for aligned readable labels, and strengthen magnetic capture to 3.5 percentage points.
