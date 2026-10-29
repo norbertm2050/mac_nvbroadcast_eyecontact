@@ -71,3 +71,18 @@ def ensure_broadcast():
     elif result.returncode:
         return "无法检查 NVIDIA Broadcast 状态。"
     return None
+
+
+def restart_broadcast():
+    """Recover only the installed Broadcast executable in our desktop session."""
+    path = broadcast_path()
+    if not path.exists():
+        raise RuntimeError("NVIDIA Broadcast is not installed")
+    # Pass the path separately, never interpolate it as PowerShell code.
+    env = dict(os.environ, EYE_BROADCAST_PATH=str(path))
+    script = "$ErrorActionPreference='Stop'; $session=(Get-Process -Id $PID).SessionId; Get-Process 'NVIDIA Broadcast' -ErrorAction SilentlyContinue | Where-Object {$_.SessionId -eq $session -and $_.Path -eq $env:EYE_BROADCAST_PATH} | Stop-Process -Force"
+    subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                   env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL, timeout=15, check=True, creationflags=0x08000000)
+    subprocess.Popen([str(path), "--launch-hidden"], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

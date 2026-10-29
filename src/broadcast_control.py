@@ -11,6 +11,11 @@ class BroadcastError(RuntimeError):
     pass
 
 
+class NoCameraDevices(BroadcastError):
+    """Gateway responded, but lost its entire camera enumeration."""
+    pass
+
+
 class BroadcastClient:
     def __init__(self, port=None, timeout=12):
         if port is None:
@@ -149,6 +154,8 @@ def prepare_pipeline(client, restore_live=False):
         state = result['state']; camera = state.get('camera', {})
         changed.append('disabled_extra_camera_effects')
     devices = client.call('list_devices', {'kind': 'camera'})
+    if not devices.get('cameras'):
+        raise NoCameraDevices('Broadcast reports no camera devices')
     matches = [d for d in devices.get('cameras', []) if d['name'] == 'OBS Virtual Camera']
     if len(matches) != 1:
         raise BroadcastError('Exactly one OBS Virtual Camera input is required')

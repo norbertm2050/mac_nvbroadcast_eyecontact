@@ -11,8 +11,9 @@ import subprocess
 import sys
 import time
 import threading
-from windows_startup import enable_startup, startup_enabled, ensure_broadcast
-from broadcast_control import control
+from windows_startup import enable_startup, startup_enabled, ensure_broadcast, restart_broadcast
+from broadcast_control import control, NoCameraDevices
+from broadcast_recovery import BroadcastRecovery
 from capture_readiness import receiver_is_live
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -165,6 +166,10 @@ class Window:
         self.broadcast_pending = False
         self.last_broadcast_check = 0
         self.broadcast_error = None
+        self.broadcast_recovery = BroadcastRecovery()
+        self.reopen_sender = threading.Event()
+        self.last_poll_time = time.monotonic()
+        self.resume_events = 0
         if not self.config.get("token"):
             self.config["token"] = secrets.token_hex(16)
             save_config(self.config)
@@ -282,14 +287,34 @@ class Window:
         self.last_broadcast_check = time.monotonic()
 
         def check():
+            live = receiver_is_live(self.home / "logs/native-receiver.json")
             try:
                 self.broadcast_error = ensure_broadcast()
-                if not self.broadcast_error and self.want_running and receiver_is_live(self.home / "logs/native-receiver.json"):
+                if not self.broadcast_error and self.want_running and live:
                     result = control("prepare")
-                    atomic_json(self.home / "state/broadcast-control.json", dict(result, updated=time.time()))
+                    self.broadcast_recovery.observe(False, live, time.monotonic())
+                    atomic_json(self.home / "state/broadcast-control.json", dict(result,
+                                recoveryAttempts=self.broadcast_recovery.attempts, updated=time.time()))
+                else:
+                    self.broadcast_recovery.observe(False, False, time.monotonic())
             except Exception as error:
                 self.broadcast_error = "Broadcast configuration check: " + str(error)
-                atomic_json(self.home / "state/broadcast-control.json", dict(phase="unavailable", error=str(error), updated=time.time()))
+                result = dict(phase="unavailable", error=str(error))
+                recover = self.broadcast_recovery.observe(isinstance(error, NoCameraDevices),
+                             live and self.want_running, time.monotonic())
+                if recover:
+                    try:
+                        restart_broadcast()
+                        # The old DirectShow handle can keep emitting black frames even
+                        # after Broadcast recovers. Reopen it on the supervisor thread.
+                        self.reopen_sender.set()
+                        self.broadcast_error = "Broadcast 摄像头列表异常，正在自动恢复…"
+                        result.update(phase="recovering", reason="empty_camera_enumeration")
+                    except Exception as restart_error:
+                        result["recoveryError"] = str(restart_error)
+                result.update(recoveryAttempts=self.broadcast_recovery.attempts,
+                              recoveryLimit=self.broadcast_recovery.limit, updated=time.time())
+                atomic_json(self.home / "state/broadcast-control.json", result)
             finally:
                 self.broadcast_pending = False
 
@@ -428,6 +453,22 @@ class Window:
         )
 
     def poll(self):
+        now = time.monotonic()
+        pause = now - self.last_poll_time
+        self.last_poll_time = now
+        # Windows monotonic time includes suspend. A long supervisor gap is a
+        # resume hint (not proof); invalidate only our disposable video handles.
+        if self.want_running and self.running and pause >= 30:
+            self.resume_events += 1
+            self.last_broadcast_check = 0
+            self.broadcast_recovery.observe(False, False, now)
+            atomic_json(self.home / "state/resume-event.json", dict(
+                reason="long_supervisor_pause_possible_resume", pauseSeconds=round(pause, 1),
+                count=self.resume_events, updated=time.time()))
+            for role in ("receiver", "sender"):
+                child = self.children[role]
+                if child.poll() is None:
+                    child.kill(); child.wait()
         if (
             self.want_running
             and not self.running
@@ -451,6 +492,11 @@ class Window:
                     "视频服务启动失败，请查看 mediamtx.log，确认端口没有被其他程序占用。"
                 )
             else:
+                if self.reopen_sender.is_set():
+                    self.reopen_sender.clear()
+                    sender = self.children["sender"]
+                    if sender.poll() is None:
+                        sender.kill(); sender.wait()
                 for role, stats in [("receiver", rx), ("sender", tx)]:
                     p = self.children[role]
                     if p.poll() is not None or (
@@ -465,7 +511,9 @@ class Window:
                         )
                         self.spawn(role, worker_command(role))
                 ready = (
-                    bool(rx.get("fresh"))
+                    not self.broadcast_error
+                    and not tx.get("uniformBlack", False)
+                    and bool(rx.get("fresh"))
                     and rx.get("fps", 0) > self.config["fps"] * 0.73
                     and tx.get("fps", 0) > self.config["fps"] * 0.73
                     and min(rx.get("updated", 0), tx.get("updated", 0))
@@ -481,7 +529,10 @@ class Window:
                 atomic_json(
                     self.home / "state/windows-status.json",
                     dict(
-                        phase="ready" if ready else "waiting",
+                        phase="ready" if ready else ("no_picture" if tx.get("uniformBlack") else "waiting"),
+                        broadcastError=self.broadcast_error,
+                        recoveryAttempts=self.broadcast_recovery.attempts,
+                        outputUniformBlack=tx.get("uniformBlack", False),
                         updated=time.time(),
                         receiveFps=rx.get("fps", 0),
                         sendFps=tx.get("fps", 0),

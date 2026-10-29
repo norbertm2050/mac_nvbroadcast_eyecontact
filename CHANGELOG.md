@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — 2026-10-29
+
+- Detect supervisor pauses of 30 seconds or longer as possible sleep/resume events, record them, and reopen disposable Windows receive/capture workers without changing camera format or restarting Windows.
+
+- Recover a confirmed empty Broadcast camera enumeration after three consecutive checks while Mac input is fresh: restart only Broadcast in the current user session and reopen the stale DirectShow sender handle. Bound attempts to two per controller run, at least five minutes apart; do not trigger from generic gateway errors, dark scenes, or active file processing.
+- Sample Windows output picture health once per second and stop reporting ready while output is uniformly black or Broadcast configuration has failed. Record recovery attempts and reasons without storing images.
+
 ## Unreleased — 2026-10-27
 
 - Add saved Windows device profiles with names, per-device connection credentials, automatic migration of the existing connection, and orderly stop/start switching from the Mac menu.

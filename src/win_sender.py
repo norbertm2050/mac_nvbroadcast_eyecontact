@@ -3,6 +3,7 @@
 import av, threading, time, json, os, fractions, traceback
 from pathlib import Path
 from latest_frame import LatestFrame
+from picture_health import PictureHealth
 from settings import data_dir, load_config, safe_error
 from capture_readiness import CaptureReadiness, receiver_is_live
 
@@ -35,6 +36,8 @@ def capture():
     # Broadcast can accept a 15 fps request yet return only black frames.
     # Keep its DirectShow contract at 30; pace NVENC independently.
     capture_fps = 30
+    picture = PictureHealth()
+    next_sample = 0
     while not (ROOT / "state/stop").exists():
         if not input_ready.wait(0.5):
             continue
@@ -54,6 +57,14 @@ def capture():
                 for frame in camera.decode(video=0):
                     if not input_ready.is_set() or (ROOT / "state/stop").exists():
                         break
+                    now = time.monotonic()
+                    if now >= next_sample:
+                        next_sample = now + 1
+                        # Sample only a tiny grayscale image; do not retain images.
+                        sample = frame.reformat(width=40, height=24, format="gray").to_ndarray()
+                        mean, deviation = float(sample.mean()), float(sample.std())
+                        status.update(uniformBlack=picture.update(mean, deviation, now, rgb=True),
+                                      pictureMean=round(mean, 2), pictureStd=round(deviation, 2))
                     latest.put(frame)
                     status["captured"] += 1
                     status["lastCapture"] = time.time()

@@ -160,3 +160,9 @@ python3 scripts/broadcast-tunnel.py user@windows-host --identity /path/to/key --
 ```
 
 The helper discovers the current Windows gateway port, starts an SSH background master bound to local loopback, and supports explicit shutdown. Verify the MCP server identifies itself as `nvidia-broadcast`. Restart the helper after a Windows reboot, lost SSH connection, or gateway-port change; it does not install a login service or automatically reopen a failed tunnel. The Windows application's automatic configuration uses the local gateway independently of this maintenance tunnel.
+
+### Broadcast 丢失摄像头列表的自动恢复
+
+Windows 收到新鲜 Mac 视频、但 Broadcast 连续三次检查返回空摄像头列表时，会重启当前登录会话中的 Broadcast 并重新打开回传采集连接。检查间隔 15 秒；每次应用运行最多两次恢复，两次至少间隔五分钟。恢复过程中会短暂中断视频。不会因为单纯黑画面或普通网络错误重启 Broadcast；正在处理文件时也不会触发这项恢复。Windows 状态及日志现在区分持续黑画面、配置失败和正常帧流。该机制处理已观察到的故障，不代表能阻止 Broadcast 自身所有异常。
+
+Windows 控制器检测到至少 30 秒的轮询暂停（可能是休眠恢复）时，会重建接收及回传工作进程，并重新检查 Broadcast，记录 `state/resume-event.json`。这是一种恢复启发式，不能据此断言系统一定休眠；未运行服务时不触发。手动让电脑休眠仍会中断视频，唤醒后需要重新连接和预热。
